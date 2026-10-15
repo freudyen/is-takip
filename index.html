@@ -522,9 +522,9 @@
   var DRIVE_FOLDER = 'İş Takip', DRIVE_BACKUPS = 'Yedekler', DRIVE_FILE = 'is-takip-data.json', DRIVE_KEEP = 30;
   var drive = {
     on: false, busy: false, connecting: false, needsLogin: false, again: false,
-    err: '', choice: null, setup: false,
+    err: '', info: '', working: '', choice: null, setup: false,
     token: null, exp: 0, tokenP: null,
-    folderId: null, backupsId: null, fileId: null, ver: null,
+    folderId: null, backupsId: null, fileId: null, md5: null,
     rev: 0, savedRev: 0, timer: null, backupDay: ''
   };
 
@@ -585,7 +585,7 @@
   var D_UP = 'https://www.googleapis.com/upload/drive/v3/files';
   function dEsc(s){ return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
   function dList(q, extra){
-    return driveFetch(D_API + '?spaces=drive&pageSize=100&fields=' + encodeURIComponent('files(id,name,version,createdTime)') +
+    return driveFetch(D_API + '?spaces=drive&pageSize=100&fields=' + encodeURIComponent('files(id,name,md5Checksum,createdTime)') +
       '&q=' + encodeURIComponent(q) + (extra || '')).then(function(r){ return r.json(); }).then(function(j){ return j.files || []; });
   }
   function dFolder(name, parent){
@@ -603,7 +603,7 @@
     var body = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
       JSON.stringify({ name: name, parents: [parent], mimeType: 'application/json' }) +
       '\r\n--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + text + '\r\n--' + b + '--';
-    return driveFetch(D_UP + '?uploadType=multipart&fields=id,version', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: body })
+    return driveFetch(D_UP + '?uploadType=multipart&fields=id,md5Checksum', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: body })
       .then(function(r){ return r.json(); });
   }
   function driveEnsure(){
@@ -614,22 +614,23 @@
       drive.backupsId = bid;
       return dList("name='" + dEsc(DRIVE_FILE) + "' and '" + drive.folderId + "' in parents and trashed=false");
     }).then(function(fs){
-      if(fs.length){ drive.fileId = fs[0].id; drive.ver = fs[0].version; }
+      if(fs.length){ drive.fileId = fs[0].id; drive.md5 = fs[0].md5Checksum; }
     });
   }
   function driveRead(){ return driveFetch(D_API + '/' + drive.fileId + '?alt=media').then(function(r){ return r.text(); }); }
-  function driveMeta(){ return driveFetch(D_API + '/' + drive.fileId + '?fields=id,version,trashed').then(function(r){ return r.json(); }); }
+  function driveMeta(){ return driveFetch(D_API + '/' + drive.fileId + '?fields=id,md5Checksum,trashed').then(function(r){ return r.json(); }); }
   function driveWrite(text){
     function create(){ return dCreate(DRIVE_FILE, drive.folderId, text).then(function(m){ drive.fileId = m.id; return m; }); }
     if(!drive.fileId) return create();
-    return driveFetch(D_UP + '/' + drive.fileId + '?uploadType=media&fields=id,version', { method: 'PATCH', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: text })
+    return driveFetch(D_UP + '/' + drive.fileId + '?uploadType=media&fields=id,md5Checksum', { method: 'PATCH', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: text })
       .then(function(r){ return r.json(); })
       .catch(function(e){ if(e.status === 404){ drive.fileId = null; return create(); } throw e; });
   }
 
   /* Günün ilk kaydında, üzerine yazılmadan önceki Drive sürümü Yedekler klasörüne kopyalanır; son 30 yedek tutulur. */
-  function drivePrune(){
+  function drivePrune(prefix){
     return dList("'" + drive.backupsId + "' in parents and trashed=false", '&orderBy=' + encodeURIComponent('createdTime desc')).then(function(fs){
+      fs = fs.filter(function(f){ return f.name.indexOf(prefix) === 0; });
       return fs.slice(DRIVE_KEEP).reduce(function(p, f){
         return p.then(function(){ return driveFetch(D_API + '/' + f.id, { method: 'DELETE' }).catch(function(){}); });
       }, Promise.resolve());
@@ -643,7 +644,7 @@
       if(fs.length){ drive.backupDay = day; return; }
       return driveRead().then(function(txt){
         if(!txt || !txt.trim()){ drive.backupDay = day; return; }
-        return dCreate(name, drive.backupsId, txt).then(function(){ drive.backupDay = day; return drivePrune(); });
+        return dCreate(name, drive.backupsId, txt).then(function(){ drive.backupDay = day; return drivePrune('is-takip-yedek-'); });
       });
     }).catch(function(e){ if(e.status === 404){ drive.fileId = null; return; } throw e; });
   }
@@ -651,18 +652,10 @@
     if(!drive.fileId) return Promise.resolve();
     return driveRead().then(function(txt){
       if(!txt || !txt.trim()) return;
-      return dCreate('is-takip-onceki-' + dayKey(Date.now()) + '-' + Date.now().toString(36) + '.json', drive.backupsId, txt).then(drivePrune);
+      return dCreate('is-takip-onceki-' + dayKey(Date.now()) + '-' + Date.now().toString(36) + '.json', drive.backupsId, txt).then(function(){ return drivePrune('is-takip-onceki-'); });
     });
   }
 
-  function driveCheckConflict(){
-    if(!drive.fileId) return Promise.resolve(true);
-    return driveMeta().then(function(m){
-      if(m.trashed){ drive.fileId = null; return true; }
-      if(drive.ver && String(m.version) !== String(drive.ver)){ drive.choice = { type: 'conflict' }; return false; }
-      return true;
-    }, function(e){ if(e.status === 404){ drive.fileId = null; return true; } throw e; });
-  }
   function driveFail(e){
     if(e && (e.auth || e.status === 401 || e.status === 403)) drive.needsLogin = true;
     drive.err = 'Drive\'a kaydedilemedi: ' + errMsg(e);
@@ -673,10 +666,12 @@
     drive.busy = true; drive.err = '';
     var rev = drive.rev, text = JSON.stringify(state, null, 2);
     updateBar();
-    return driveToken(false).then(driveEnsure).then(driveCheckConflict).then(function(ok){
-      if(!ok) return;
+    return driveToken(false).then(driveEnsure).then(function(){
       return driveDailyBackup().then(function(){ return driveWrite(text); }).then(function(m){
-        drive.ver = m.version; drive.savedRev = rev; drive.needsLogin = false;
+        if(m.md5Checksum) return m;
+        return driveMeta();
+      }).then(function(m){
+        drive.md5 = m.md5Checksum || null; drive.savedRev = rev; drive.needsLogin = false;
       });
     }).catch(driveFail).then(function(){
       drive.busy = false; updateBar();
@@ -684,26 +679,44 @@
     });
   }
   function driveQueue(){
+    drive.info = '';
     drive.rev++;
     clearTimeout(drive.timer);
     drive.timer = setTimeout(driveSave, 1500);
   }
 
-  function driveAdopt(remoteState, ver){
-    state = remoteState; drive.ver = ver; drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
+  /* Elle yedek: o anki verinin tarihli bir kopyasını Yedekler klasörüne yazar (günlük yedekten bağımsız). */
+  function driveBackupNow(){
+    if(!drive.on || drive.working) return Promise.resolve();
+    drive.working = 'Drive\'a yedek alınıyor…'; drive.err = ''; drive.info = ''; updateBar();
+    var d = new Date(), name = 'is-takip-elle-' + dayKey(d.getTime()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.json';
+    var text = JSON.stringify(state, null, 2);
+    return driveToken(true).then(driveEnsure).then(function(){
+      return dCreate(name, drive.backupsId, text);
+    }).then(function(){
+      return drivePrune('is-takip-elle-');
+    }).then(function(){
+      drive.info = '✓ Yedek alındı: ' + DRIVE_FOLDER + ' › ' + DRIVE_BACKUPS + ' › ' + name;
+    }).catch(function(e){ drive.err = 'Yedek alınamadı: ' + errMsg(e); if(e && e.auth) drive.needsLogin = true; })
+      .then(function(){ drive.working = ''; updateBar(); });
+  }
+
+  function driveAdopt(remoteState, md5){
+    state = remoteState; drive.md5 = md5; drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
     drive.rev = 0; drive.savedRev = 0; editKey = null; dirty = false;
     lsSet('is-takip-drive', '1');
     render();
   }
   function driveLoadRemote(){
-    return driveRead().then(function(txt){
+    return driveMeta().then(function(meta){ return driveRead().then(function(txt){ return { meta: meta, txt: txt }; }); }).then(function(x){
+      var txt = x.txt, meta = x.meta;
       var r; try { r = normalize(JSON.parse(txt)); } catch(e){ throw new Error('Drive\'daki dosya geçerli bir JSON değil.'); }
-      return driveMeta().then(function(m){ driveAdopt(r, m.version); });
+      return driveAdopt(r, meta.md5Checksum);
     });
   }
   function driveKeepLocal(){
-    return driveSnapshotRemote().then(function(){ return drive.fileId ? driveMeta() : { version: null }; }).then(function(m){
-      drive.ver = m.version; drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
+    return driveSnapshotRemote().then(function(){ return drive.fileId ? driveMeta() : { md5Checksum: null }; }).then(function(m){
+      drive.md5 = m.md5Checksum; drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
       lsSet('is-takip-drive', '1');
       drive.rev++;
       return driveSave();
@@ -717,7 +730,7 @@
       return driveRead().then(function(txt){
         var remote = null; try { remote = normalize(JSON.parse(txt)); } catch(e){}
         var localEmpty = !state.projects.length && !Object.keys((state.leave && state.leave.days) || {}).length;
-        if(remote && (localEmpty || JSON.stringify(remote) === JSON.stringify(normalize(state)))) return driveAdopt(remote, drive.ver);
+        if(remote && (localEmpty || JSON.stringify(remote) === JSON.stringify(normalize(state)))) return driveAdopt(remote, drive.md5);
         drive.choice = { type: 'connect', remoteOk: !!remote };
       });
     }).catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
@@ -740,7 +753,7 @@
   function driveDisconnect(){
     clearTimeout(drive.timer);
     drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = '';
-    drive.folderId = drive.backupsId = drive.fileId = drive.ver = null; drive.token = null;
+    drive.folderId = drive.backupsId = drive.fileId = drive.md5 = null; drive.token = null;
     lsSet('is-takip-drive', null);
     updateBar();
   }
@@ -752,8 +765,8 @@
     if(!drive.on || drive.busy || drive.connecting || drive.choice || !drive.fileId) return Promise.resolve();
     if(!manual && (driveDirty() || editKey)) return Promise.resolve();
     return driveToken(false).then(driveMeta).then(function(m){
-      if(String(m.version) === String(drive.ver)) return;
-      if(driveDirty()){ drive.choice = { type: 'conflict' }; return; }
+      if(!m.md5Checksum || !drive.md5 || String(m.md5Checksum) === String(drive.md5)) return;
+      if(driveDirty()) return;
       return driveLoadRemote();
     }).catch(function(e){
       if(e && e.auth) drive.needsLogin = true;
@@ -783,12 +796,12 @@
     if(drive.err){ cls += ' err'; msg = '⚠ ' + drive.err; }
     else if(drive.choice && drive.choice.type === 'connect'){
       cls += ' warn'; msg = 'Drive\'da zaten kayıtlı veri var. Hangisi kullanılsın?';
-    } else if(drive.choice){
-      cls += ' warn'; msg = 'Drive\'daki dosya başka bir cihazdan değiştirilmiş. Hangisi kullanılsın?';
-    } else if(drive.connecting){ cls += ' warn'; msg = '☁ Google Drive\'a bağlanılıyor…'; }
+    } else if(drive.working){ cls += ' warn'; msg = '☁ ' + drive.working; }
+    else if(drive.connecting){ cls += ' warn'; msg = '☁ Google Drive\'a bağlanılıyor…'; }
     else if(drive.needsLogin){ cls += ' warn'; msg = '☁ Drive bağlantısı için yeniden giriş gerekli.'; }
     else if(drive.on && drive.busy){ cls += ' warn'; msg = '● Drive\'a yazılıyor…'; }
     else if(drive.on && driveDirty()){ cls += ' warn'; msg = '● Değişiklikler birazdan Drive\'a yazılacak…'; }
+    else if(drive.on && drive.info){ cls += ' ok'; msg = drive.info; }
     else if(drive.on){ cls += ' ok'; msg = '✓ Veriler Google Drive › ' + DRIVE_FOLDER + ' klasörüne otomatik kaydediliyor. Günlük yedekler Yedekler klasöründe.'; }
     else { msg = 'Veriler henüz Google Drive\'a bağlı değil.'; }
 
@@ -796,12 +809,10 @@
       B('☁ Drive\'dakini yükle', function(){ driveChoose('remote'); }, true, !drive.choice.remoteOk);
       B('⬆ Bu cihazdakini Drive\'a yaz', function(){ driveChoose('local'); }, true);
       B('Vazgeç', function(){ driveChoose('cancel'); });
-    } else if(drive.choice){
-      B('☁ Drive\'daki sürümü yükle', function(){ driveChoose('remote'); }, true);
-      B('⬆ Benimkini yaz (Drive\'daki sürüm yedeklenir)', function(){ driveChoose('local'); }, true);
     } else if(drive.needsLogin){
       B('🔓 Drive\'a yeniden bağlan', driveReconnect, true);
-    } else if(drive.on){
+    } else if(drive.on && !drive.working){
+      B('💾 Drive\'a yedek al', driveBackupNow);
       B('↻ Şimdi eşitle', driveSyncNow);
       B('Bağlantıyı kes', driveDisconnect);
     } else if(!drive.connecting){
