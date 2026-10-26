@@ -8,12 +8,12 @@
 <style>
   :root{
     --bg:#f4f5f7; --card:#ffffff; --sub:#f7f8fa; --text:#1f2430; --muted:#6b7280; --line:#e3e6ec;
-    --accent:#3b6cf6; --accent-text:#fff; --ok:#16a34a; --ok-bg:#e8f6ee; --danger:#dc2626; --warn:#b45309; --mark:#fde68a; --mark-text:#1f2430;
+    --accent:#3b6cf6; --accent-text:#fff; --ok:#16a34a; --ok-bg:#e8f6ee; --danger:#dc2626; --warn:#b45309; --mark:#fde68a; --mark-text:#1f2430; --alarm-bg:#fff4d6;
   }
   @media (prefers-color-scheme: dark){
     :root{
       --bg:#14161b; --card:#1d2027; --sub:#23272f; --text:#e8eaef; --muted:#9097a5; --line:#2c303a;
-      --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24; --mark:#854d0e; --mark-text:#fff7d6;
+      --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24; --mark:#854d0e; --mark-text:#fff7d6; --alarm-bg:#3a2c0a;
     }
   }
   *{box-sizing:border-box}
@@ -186,10 +186,25 @@
   mark.hl{background:var(--mark);color:var(--mark-text);border-radius:3px;padding:0 1px}
   @keyframes flashbg{0%,60%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
   .flash{animation:flashbg 2.2s ease-out;border-radius:8px}
+  /* Hatırlatıcı */
+  .alarmbar{position:sticky;top:0;z-index:60;display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+  .alarmbar:empty{display:none}
+  .alarm{background:var(--alarm-bg);border:2px solid var(--warn);border-radius:10px;padding:10px 12px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  .alarm .arow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .alarm .atext{flex:1 1 200px;font-weight:600;white-space:pre-wrap;word-break:break-word}
+  .alarm .awhen{font-size:12px;color:var(--muted)}
+  .alarm form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+  .alarm input[type=datetime-local],.aform input[type=datetime-local]{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+  .alarm .err,.aform .err{flex:1 0 100%;color:var(--danger);font-size:13px}
+  .alarm .err:empty,.aform .err:empty{display:none}
+  .aform{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+  .aform input[type=text]{flex:1 1 220px;padding:8px 10px}
+  .arow-item.due .atime{color:var(--danger);font-weight:600}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="alarmbar" id="alarmBar" role="alert" aria-live="assertive"></div>
   <header>
     <h1>📋 İş Takip</h1>
     <div class="stats" id="stats"></div>
@@ -204,6 +219,7 @@
     <button type="button" data-tab="tasks" class="active" aria-selected="true">📋 İşler</button>
     <button type="button" data-tab="cal" aria-selected="false">📅 Takvim</button>
     <button type="button" data-tab="dash" aria-selected="false">📊 Dashboard</button>
+    <button type="button" data-tab="alarm" aria-selected="false">⏰ Hatırlatıcı</button>
     <button type="button" data-tab="search" aria-selected="false" title="Ara ( / tuşu )">🔍 Ara</button>
   </nav>
 
@@ -232,6 +248,7 @@
 
   <div id="tab-cal" hidden><div id="calView"></div></div>
   <div id="tab-dash" hidden><div id="dashView"></div></div>
+  <div id="tab-alarm" hidden><div id="alarmView"></div></div>
   <div id="tab-search" hidden>
     <div class="searchbox"><input type="search" id="searchInput" placeholder="Ara: proje, iş, madde, not, hatırlatma, haftalık plan…" maxlength="100" autocomplete="off" aria-label="Genel arama"></div>
     <div id="searchView"></div>
@@ -242,7 +259,7 @@
 
 <script>
 (function(){
-  var state = { projects: [], weekly: {}, leave: { days: {}, adjust: 0, notes: {} } };
+  var state = { projects: [], weekly: {}, leave: { days: {}, adjust: 0, notes: {} }, alarms: [] };
   var weekKey = '';
   var tab = 'tasks';
   var editKey = null;
@@ -274,8 +291,9 @@
       adjust: isFinite(+lv.adjust) ? +lv.adjust : 0,
       notes: (lv.notes && typeof lv.notes === 'object' && !Array.isArray(lv.notes)) ? lv.notes : {}
     };
-    if(s && Array.isArray(s.projects)) return { projects: s.projects, weekly: w, leave: L };
-    return { projects: [], weekly: {}, leave: { days: {}, adjust: 0, notes: {} } };
+    var al = (s && Array.isArray(s.alarms)) ? s.alarms.filter(function(a){ return a && typeof a.text === 'string' && isFinite(+a.at); }) : [];
+    if(s && Array.isArray(s.projects)) return { projects: s.projects, weekly: w, leave: L, alarms: al };
+    return { projects: [], weekly: {}, leave: { days: {}, adjust: 0, notes: {} }, alarms: [] };
   }
 
   /* ---------- IndexedDB Bağlantı Hafızası ---------- */
@@ -939,6 +957,147 @@
   function askDelete(msg){ return confirm(msg + '\n\nBu işlem geri alınamaz.'); }
 
 
+  /* ---------- Hatırlatıcı (tarih-saatli uyarılar) ---------- */
+  var snoozeId = null, snoozeVal = '', snoozeErr = '', lastDueKey = '';
+  function alarmList(){ if(!Array.isArray(state.alarms)) state.alarms = []; return state.alarms; }
+  function dueAlarms(){
+    var now = Date.now();
+    return alarmList().filter(function(a){ return a.at <= now; }).sort(function(a, b){ return a.at - b.at; });
+  }
+  function defaultAlarmValue(mins){ return localInputValue(Date.now() + mins * 60000); }
+  function parseWhen(v){ var t = v ? new Date(v).getTime() : NaN; return isNaN(t) ? null : t; }
+
+  function addAlarm(text, ts){
+    alarmList().push({ id: uid(), text: text.trim(), at: ts, createdAt: Date.now() });
+    commit('alarm');
+  }
+  function ackAlarm(id){
+    state.alarms = alarmList().filter(function(a){ return a.id !== id; });
+    if(snoozeId === id) snoozeId = null;
+    commit();
+  }
+  function deleteAlarm(id){
+    var a = alarmList().find(function(x){ return x.id === id; });
+    if(!a || !askDelete('Bu hatırlatıcı silinsin mi?\n"' + snip(a.text, 80) + '"')) return;
+    ackAlarm(id);
+  }
+  function setAlarm(id, text, ts){
+    var a = alarmList().find(function(x){ return x.id === id; });
+    if(!a) return;
+    a.text = text; a.at = ts; commit();
+  }
+
+  /* Her sekmenin en üstünde görünen uyarı bandı */
+  function renderAlarmBar(){
+    var bar = document.getElementById('alarmBar');
+    var due = dueAlarms();
+    lastDueKey = due.map(function(a){ return a.id + ':' + a.at; }).join('|');
+    bar.innerHTML = '';
+    due.forEach(function(a){
+      var kids = [
+        el('div', { class:'arow' }, [
+          el('span', { text:'⏰', 'aria-hidden':'true' }),
+          el('span', { class:'atext', text:a.text }),
+          el('span', { class:'awhen', text:fmt(a.at) }),
+          el('button', { type:'button', class:'primary small', text:'✓ Onayla', onclick:function(){ ackAlarm(a.id); } }),
+          el('button', { type:'button', class:'small', text:'⏱ Ertele', onclick:function(){
+            snoozeId = a.id; snoozeVal = defaultAlarmValue(60); snoozeErr = ''; renderAlarmBar();
+            var i = document.querySelector('#alarmBar input[type=datetime-local]'); if(i) i.focus();
+          } })
+        ])
+      ];
+      if(snoozeId === a.id){
+        var inp = el('input', { type:'datetime-local', 'aria-label':'Yeni hatırlatma zamanı' });
+        inp.value = snoozeVal;
+        inp.addEventListener('input', function(){ snoozeVal = inp.value; });
+        var err = el('span', { class:'err', text:snoozeErr });
+        inp.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ e.preventDefault(); snoozeId = null; renderAlarmBar(); } });
+        kids.push(el('form', { onsubmit:function(e){
+          e.preventDefault();
+          var ts = parseWhen(inp.value);
+          if(ts === null){ err.textContent = 'Geçerli bir tarih ve saat girin.'; return; }
+          if(ts <= Date.now()){ err.textContent = 'Gelecekte bir zaman girin.'; return; }
+          snoozeId = null; setAlarm(a.id, a.text, ts);
+        } }, [
+          el('span', { class:'awhen', text:'Yeni zaman:' }), inp,
+          el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+          el('button', { type:'button', class:'small', text:'İptal', onclick:function(){ snoozeId = null; renderAlarmBar(); } }),
+          err
+        ]));
+      }
+      bar.appendChild(el('div', { class:'alarm' }, kids));
+    });
+    /* sekme başlığı ve sekme düğmesi */
+    document.title = (due.length ? '⏰ (' + due.length + ') ' : '') + 'İş Takip';
+    var tb = document.querySelector('#tabs [data-tab="alarm"]');
+    if(tb) tb.textContent = '⏰ Hatırlatıcı' + (due.length ? ' (' + due.length + ')' : '');
+  }
+  function alarmTick(){
+    var key = dueAlarms().map(function(a){ return a.id + ':' + a.at; }).join('|');
+    if(key !== lastDueKey) renderAlarmBar();   /* açık "Ertele" alanı snoozeVal ile korunur */
+    if(tab === 'alarm' && key !== lastRenderedAlarmKey && !editKey) renderAlarms();
+  }
+  var lastRenderedAlarmKey = '';
+
+  function renderAlarms(){
+    var root = document.getElementById('alarmView'); root.innerHTML = '';
+    lastRenderedAlarmKey = dueAlarms().map(function(a){ return a.id + ':' + a.at; }).join('|');
+    var text = el('input', { type:'text', maxlength:'300', autocomplete:'off', placeholder:'Neyi hatırlatayım? (örn. Müşteriyi ara)', 'aria-label':'Hatırlatma notu', 'data-key':'alarm' });
+    var when = el('input', { type:'datetime-local', 'aria-label':'Hatırlatma zamanı' });
+    when.value = defaultAlarmValue(60);
+    var err = el('span', { class:'err' });
+    root.appendChild(el('div', { class:'panel' }, [
+      el('h2', { text:'Yeni hatırlatıcı' }),
+      el('form', { class:'aform', onsubmit:function(e){
+        e.preventDefault();
+        var t = text.value.trim(), ts = parseWhen(when.value);
+        if(!t){ err.textContent = 'Bir not yazın.'; return; }
+        if(ts === null){ err.textContent = 'Geçerli bir tarih ve saat girin.'; return; }
+        if(ts <= Date.now()){ err.textContent = 'Gelecekte bir zaman girin.'; return; }
+        addAlarm(t, ts);
+      } }, [ text, when, el('button', { type:'submit', class:'primary', text:'Ekle' }), err ])
+    ]));
+
+    var list = alarmList().slice().sort(function(a, b){ return a.at - b.at; });
+    var now = Date.now();
+    var panel = el('div', { class:'panel', style:'margin-top:14px' }, [ el('h2', { text:'Hatırlatıcılar (' + list.length + ')' }) ]);
+    if(!list.length){
+      panel.appendChild(el('div', { class:'empty', text:'Henüz hatırlatıcı yok. Zamanı gelince sayfanın en üstünde uyarı çıkar; Onayla derseniz silinir, Ertele derseniz yeni zaman girersiniz.' }));
+    } else {
+      var ul = el('ul');
+      list.forEach(function(a){
+        var due = a.at <= now;
+        if(editKey === 'a:' + a.id){
+          var et = el('input', { type:'text', maxlength:'300', autocomplete:'off', 'data-edit':'1', 'aria-label':'Not' });
+          et.value = a.text;
+          var ew = el('input', { type:'datetime-local', 'aria-label':'Zaman' });
+          ew.value = localInputValue(a.at);
+          var eerr = el('span', { class:'err' });
+          [et, ew].forEach(function(i){ i.addEventListener('keydown', escCancel); });
+          ul.appendChild(el('li', { 'data-sid': a.id }, [
+            el('form', { class:'aform', style:'flex:1 0 100%', onsubmit:function(e){
+              e.preventDefault();
+              var t = et.value.trim(), ts = parseWhen(ew.value);
+              if(!t){ eerr.textContent = 'Bir not yazın.'; return; }
+              if(ts === null){ eerr.textContent = 'Geçerli bir tarih ve saat girin.'; return; }
+              editKey = null; setAlarm(a.id, t, ts);
+            } }, [ et, ew, el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+              el('button', { type:'button', class:'small', text:'İptal', onclick:cancelEdit }), eerr ])
+          ]));
+          return;
+        }
+        ul.appendChild(el('li', { class:'arow-item' + (due ? ' due' : ''), 'data-sid': a.id }, [
+          el('span', { class:'txt rtxt', text:a.text }),
+          el('span', { class:'created-tag atime', title:'Hatırlatma zamanı', text:(due ? '⏰ Zamanı geldi • ' : '') + fmt(a.at) }),
+          editBtn('a:' + a.id, 'Hatırlatıcıyı'),
+          delBtn('Hatırlatıcıyı', function(){ deleteAlarm(a.id); })
+        ]));
+      });
+      panel.appendChild(ul);
+    }
+    root.appendChild(panel);
+  }
+
   /* ---------- Genel Arama ---------- */
   var searchQ = '';
   var FOLDMAP = { 'ı':'i','İ':'i','ç':'c','Ç':'c','ğ':'g','Ğ':'g','ö':'o','Ö':'o','ş':'s','Ş':'s','ü':'u','Ü':'u','â':'a','Â':'a','î':'i','û':'u' };
@@ -1021,7 +1180,7 @@
   }
 
   function collectResults(words){
-    var G = { proje:[], is:[], madde:[], hat:[], hafta:[], izin:[] };
+    var G = { proje:[], is:[], madde:[], hat:[], hafta:[], izin:[], alarm:[] };
     state.projects.forEach(function(p){
       if(matches(words, p.title + ' ' + (p.note || ''))){
         G.proje.push({ main:p.title, note:p.note, meta:p.tasks.length + ' iş', go:function(){ goTask(p.id); } });
@@ -1052,6 +1211,11 @@
         }
       });
     });
+    alarmList().slice().sort(function(a, b){ return a.at - b.at; }).forEach(function(a){
+      if(matches(words, a.text)){
+        G.alarm.push({ main:a.text, meta:fmt(a.at) + (a.at <= Date.now() ? ' • zamanı geldi' : ''), go:function(){ tab = 'alarm'; editKey = null; render(); flashEl(findBySid(a.id)); } });
+      }
+    });
     var L = leaveData();
     Object.keys(L.notes).sort().reverse().forEach(function(k){
       if(matches(words, L.notes[k] + ' ' + fmtDay(k))){
@@ -1060,7 +1224,7 @@
     });
     return [
       ['📁 Projeler', G.proje], ['🗂 İşler', G.is], ['✅ Maddeler', G.madde],
-      ['📌 Hatırlatmalar', G.hat], ['🗓 Haftalık plan', G.hafta], ['★ İzin notları', G.izin]
+      ['📌 Hatırlatmalar', G.hat], ['⏰ Hatırlatıcılar', G.alarm], ['🗓 Haftalık plan', G.hafta], ['★ İzin notları', G.izin]
     ];
   }
 
@@ -2146,7 +2310,7 @@
 
   function render(focusKey){
     updateStats();
-    ['tasks', 'cal', 'dash', 'search'].forEach(function(k){ document.getElementById('tab-' + k).hidden = (k !== tab); });
+    ['tasks', 'cal', 'dash', 'alarm', 'search'].forEach(function(k){ document.getElementById('tab-' + k).hidden = (k !== tab); });
     Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
       var on = b.getAttribute('data-tab') === tab;
       b.classList.toggle('active', on);
@@ -2156,7 +2320,9 @@
     if(tab === 'tasks') renderTasks();
     else if(tab === 'cal') renderCalendar();
     else if(tab === 'search') renderSearch();
+    else if(tab === 'alarm') renderAlarms();
     else renderDashboard();
+    renderAlarmBar();
 
     var target = null;
     if(editKey){
@@ -2186,6 +2352,8 @@
     inp.value = '';
   });
   document.getElementById('clearDone').addEventListener('click', clearDone);
+  setInterval(alarmTick, 15000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) alarmTick(); });
   document.getElementById('searchInput').addEventListener('input', function(e){ searchQ = e.target.value; renderSearch(); });
   document.getElementById('searchInput').addEventListener('keydown', function(e){
     if(e.key === 'Escape' && searchQ){ e.preventDefault(); searchQ = ''; renderSearch(); }
