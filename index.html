@@ -8,12 +8,12 @@
 <style>
   :root{
     --bg:#f4f5f7; --card:#ffffff; --sub:#f7f8fa; --text:#1f2430; --muted:#6b7280; --line:#e3e6ec;
-    --accent:#3b6cf6; --accent-text:#fff; --ok:#16a34a; --ok-bg:#e8f6ee; --danger:#dc2626; --warn:#b45309;
+    --accent:#3b6cf6; --accent-text:#fff; --ok:#16a34a; --ok-bg:#e8f6ee; --danger:#dc2626; --warn:#b45309; --mark:#fde68a; --mark-text:#1f2430;
   }
   @media (prefers-color-scheme: dark){
     :root{
       --bg:#14161b; --card:#1d2027; --sub:#23272f; --text:#e8eaef; --muted:#9097a5; --line:#2c303a;
-      --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24;
+      --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24; --mark:#854d0e; --mark-text:#fff7d6;
     }
   }
   *{box-sizing:border-box}
@@ -162,6 +162,30 @@
   .reminders ul{margin-top:6px}
   .reminders li{font-size:14px}
   .hint{margin-top:28px;color:var(--muted);font-size:13px;text-align:center}
+  /* Çok satırlı hatırlatma */
+  .rtxt{white-space:pre-wrap}
+  .remform{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 0 100%}
+  .remform textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;resize:vertical;min-height:64px}
+  .remform textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .remform .rbtns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .remform .hintx{font-size:12px;color:var(--muted)}
+  /* Global arama */
+  .searchbox{margin-bottom:14px}
+  .searchbox input{width:100%;padding:12px 14px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);font-family:inherit}
+  .searchbox input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .sgroup{margin-bottom:18px}
+  .sgroup h3{margin:0 0 8px;font-size:15px}
+  .sgroup h3 .count{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
+  .sres{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+  .sres li{display:block;padding:0}
+  .sres button.sitem{display:block;width:100%;text-align:left;padding:9px 12px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;cursor:pointer}
+  .sres button.sitem:hover,.sres button.sitem:focus-visible{border-color:var(--accent)}
+  .sres .smain{display:block;word-break:break-word;white-space:pre-wrap}
+  .sres .smeta{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+  .sres .snote{display:block;font-size:13px;color:var(--muted);margin-top:4px;white-space:pre-wrap;word-break:break-word;border-left:3px solid var(--accent);padding-left:8px}
+  mark.hl{background:var(--mark);color:var(--mark-text);border-radius:3px;padding:0 1px}
+  @keyframes flashbg{0%,60%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
+  .flash{animation:flashbg 2.2s ease-out;border-radius:8px}
 </style>
 </head>
 <body>
@@ -180,6 +204,7 @@
     <button type="button" data-tab="tasks" class="active" aria-selected="true">📋 İşler</button>
     <button type="button" data-tab="cal" aria-selected="false">📅 Takvim</button>
     <button type="button" data-tab="dash" aria-selected="false">📊 Dashboard</button>
+    <button type="button" data-tab="search" aria-selected="false" title="Ara ( / tuşu )">🔍 Ara</button>
   </nav>
 
   <div id="tab-tasks">
@@ -207,6 +232,10 @@
 
   <div id="tab-cal" hidden><div id="calView"></div></div>
   <div id="tab-dash" hidden><div id="dashView"></div></div>
+  <div id="tab-search" hidden>
+    <div class="searchbox"><input type="search" id="searchInput" placeholder="Ara: proje, iş, madde, not, hatırlatma, haftalık plan…" maxlength="100" autocomplete="off" aria-label="Genel arama"></div>
+    <div id="searchView"></div>
+  </div>
 
   <p class="hint">Veriler bağımsız bir <code>.json</code> dosyasında saklanır.</p>
 </div>
@@ -905,6 +934,171 @@
   }
   function commit(focusKey){ changed(); render(focusKey); }
 
+  /* Silme onayı: her silme işlemi bundan geçer */
+  function snip(x, n){ x = String(x == null ? '' : x).replace(/\s+/g, ' ').trim(); return x.length > n ? x.slice(0, n - 1) + '…' : x; }
+  function askDelete(msg){ return confirm(msg + '\n\nBu işlem geri alınamaz.'); }
+
+
+  /* ---------- Genel Arama ---------- */
+  var searchQ = '';
+  var FOLDMAP = { 'ı':'i','İ':'i','ç':'c','Ç':'c','ğ':'g','Ğ':'g','ö':'o','Ö':'o','ş':'s','Ş':'s','ü':'u','Ü':'u','â':'a','Â':'a','î':'i','û':'u' };
+  /* Büyük/küçük harf ve Türkçe karakterden bağımsız karşılaştırma (1:1 uzunluk korunur) */
+  function fold(x){
+    x = String(x == null ? '' : x); var o = '';
+    for(var i = 0; i < x.length; i++){
+      var c = x.charAt(i), m = FOLDMAP[c];
+      if(m){ o += m; continue; }
+      var l = c.toLowerCase(); o += (l.length === 1 ? l : c);
+    }
+    return o;
+  }
+  function searchWords(q){ return fold(q).split(/\s+/).filter(Boolean); }
+  function matches(words, text){
+    var f = fold(text);
+    return words.every(function(w){ return f.indexOf(w) >= 0; });
+  }
+  /* Eşleşen kısımları <mark> ile vurgula; uzun metni eşleşme çevresinde kısalt */
+  function hl(text, words, maxLen){
+    text = String(text == null ? '' : text);
+    var f = fold(text), first = -1;
+    words.forEach(function(w){ var i = f.indexOf(w); if(i >= 0 && (first < 0 || i < first)) first = i; });
+    var start = 0, end = text.length, pre = '', post = '';
+    if(maxLen && text.length > maxLen){
+      start = Math.max(0, (first < 0 ? 0 : first) - 40);
+      end = Math.min(text.length, start + maxLen);
+      if(start > 0) pre = '…';
+      if(end < text.length) post = '…';
+    }
+    var mask = new Array(end - start + 1).join('0').split('');
+    words.forEach(function(w){
+      var from = start;
+      while(true){
+        var i = f.indexOf(w, from);
+        if(i < 0 || i >= end) break;
+        for(var k = i; k < Math.min(end, i + w.length); k++) mask[k - start] = '1';
+        from = i + Math.max(1, w.length);
+      }
+    });
+    var frag = document.createDocumentFragment();
+    if(pre) frag.appendChild(document.createTextNode(pre));
+    var i2 = 0, seg = text.slice(start, end);
+    while(i2 < seg.length){
+      var on = mask[i2] === '1', j = i2;
+      while(j < seg.length && (mask[j] === '1') === on) j++;
+      var part = seg.slice(i2, j);
+      if(on) frag.appendChild(el('mark', { class:'hl', text: part }));
+      else frag.appendChild(document.createTextNode(part));
+      i2 = j;
+    }
+    if(post) frag.appendChild(document.createTextNode(post));
+    return frag;
+  }
+
+  function flashEl(node){
+    if(!node) return;
+    try { node.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e){ node.scrollIntoView(); }
+    node.classList.remove('flash'); void node.offsetWidth; node.classList.add('flash');
+    setTimeout(function(){ node.classList.remove('flash'); }, 2300);
+  }
+  function findBySid(id){
+    var all = document.querySelectorAll('[data-sid]');
+    for(var i = 0; i < all.length; i++) if(all[i].getAttribute('data-sid') === id) return all[i];
+    return null;
+  }
+  function goTask(sid, pid){
+    tab = 'tasks'; editKey = null; tasksFilter = '';
+    if(pid) remOpen[pid] = true;
+    render();
+    flashEl(findBySid(sid));
+  }
+  function goDay(key, weekly){
+    var d = keyToDate(key);
+    tab = 'cal'; editKey = null;
+    calYear = d.getFullYear(); calMonth = d.getMonth(); selDay = key; weekKey = mondayKey(d.getTime());
+    render();
+    if(weekly){ var n = findBySid(weekly); flashEl(n || document.querySelector('.weekly')); }
+    else flashEl(document.querySelector('.xbox') || document.querySelector('[data-day="' + key + '"]'));
+  }
+
+  function collectResults(words){
+    var G = { proje:[], is:[], madde:[], hat:[], hafta:[], izin:[] };
+    state.projects.forEach(function(p){
+      if(matches(words, p.title + ' ' + (p.note || ''))){
+        G.proje.push({ main:p.title, note:p.note, meta:p.tasks.length + ' iş', go:function(){ goTask(p.id); } });
+      }
+      remList(p).forEach(function(r){
+        if(matches(words, r.text)){
+          G.hat.push({ main:r.text, meta:p.title + (r.createdAt ? ' • ' + fmt(r.createdAt) : ''), go:function(){ goTask(r.id, p.id); } });
+        }
+      });
+      p.tasks.forEach(function(t){
+        if(matches(words, t.title + ' ' + (t.note || ''))){
+          G.is.push({ main:t.title, note:t.note, meta:p.title, go:function(){ goTask(t.id); } });
+        }
+        t.items.forEach(function(it){
+          if(matches(words, it.text + ' ' + (it.note || ''))){
+            G.madde.push({ main:it.text, note:it.note,
+              meta:p.title + ' › ' + t.title + ' • ' + (it.done ? 'Tamamlandı' + (it.doneAt ? ' ' + fmt(it.doneAt) : '') : 'Açık'),
+              go:function(){ goTask(it.id); } });
+          }
+        });
+      });
+    });
+    var wl = {}; WSTATUS.forEach(function(o){ wl[o[0]] = o[1]; });
+    Object.keys(state.weekly || {}).sort().reverse().forEach(function(wk){
+      (state.weekly[wk] || []).forEach(function(it){
+        if(matches(words, it.text + ' ' + (it.note || ''))){
+          G.hafta.push({ main:it.text, note:it.note, meta:fmtDay(wk) + ' haftası • ' + (wl[it.status || 'planned'] || ''), go:function(){ goDay(wk, it.id); } });
+        }
+      });
+    });
+    var L = leaveData();
+    Object.keys(L.notes).sort().reverse().forEach(function(k){
+      if(matches(words, L.notes[k] + ' ' + fmtDay(k))){
+        G.izin.push({ main:L.notes[k], meta:fmtDay(k) + (L.days[k] ? ' • ' + (LEAVE_TYPES[L.days[k]] || 'Fazla çalışma') : ''), go:function(){ goDay(k); } });
+      }
+    });
+    return [
+      ['📁 Projeler', G.proje], ['🗂 İşler', G.is], ['✅ Maddeler', G.madde],
+      ['📌 Hatırlatmalar', G.hat], ['🗓 Haftalık plan', G.hafta], ['★ İzin notları', G.izin]
+    ];
+  }
+
+  function renderSearch(){
+    var root = document.getElementById('searchView'); root.innerHTML = '';
+    var inp = document.getElementById('searchInput');
+    if(inp.value !== searchQ) inp.value = searchQ;
+    var words = searchWords(searchQ);
+    if(!words.length){
+      root.appendChild(el('div', { class:'empty', text:'Aramak için bir veya birkaç kelime yazın. Büyük/küçük harf ve Türkçe karakter (ı, ş, ğ…) fark etmez; birden fazla kelime yazarsanız hepsi geçen kayıtlar bulunur.' }));
+      return;
+    }
+    var groups = collectResults(words), total = 0, LIMIT = 50;
+    groups.forEach(function(g){
+      var rows = g[1]; if(!rows.length) return;
+      total += rows.length;
+      var ul = el('ul', { class:'sres' });
+      rows.slice(0, LIMIT).forEach(function(r){
+        var btn = el('button', { type:'button', class:'sitem', title:'Bulunduğu yere git', onclick:r.go }, [
+          el('span', { class:'smain' }, [ hl(r.main, words, 220) ]),
+          r.note ? el('span', { class:'snote' }, [ hl(r.note, words, 200) ]) : null,
+          r.meta ? el('span', { class:'smeta', text:r.meta }) : null
+        ]);
+        ul.appendChild(el('li', null, [ btn ]));
+      });
+      if(rows.length > LIMIT) ul.appendChild(el('li', { class:'empty', text:'… ve ' + (rows.length - LIMIT) + ' sonuç daha. Aramayı daraltın.' }));
+      root.appendChild(el('div', { class:'sgroup' }, [
+        el('h3', null, [ el('span', { text:g[0] }), el('span', { class:'count', text:String(rows.length) }) ]),
+        ul
+      ]));
+    });
+    if(!total) root.appendChild(el('div', { class:'empty', text:'"' + searchQ.trim() + '" için sonuç bulunamadı.' }));
+  }
+  function openSearch(){
+    tab = 'search'; editKey = null; render();
+    var i = document.getElementById('searchInput'); i.focus(); i.select();
+  }
+
   /* ---------- Proje Hatırlatmaları (iş değil, sadece not/hatırlatma) ---------- */
   var remOpen = {};
   function remList(p){ if(!Array.isArray(p.reminders)) p.reminders = []; return p.reminders; }
@@ -922,8 +1116,34 @@
   }
   function deleteReminder(pid, rid){
     var p = findProject(pid); if(!p) return;
+    var rr = remList(p).find(function(x){ return x.id === rid; });
+    if(!rr || !askDelete('Bu hatırlatma silinsin mi?\n"' + snip(rr.text, 80) + '"')) return;
     p.reminders = remList(p).filter(function(x){ return x.id !== rid; });
     commit();
+  }
+  /* Çok satırlı hatırlatma formu: Enter = alt satır, Ctrl+Enter = kaydet */
+  function remForm(text, btnText, isEdit, onSave, dataKey){
+    var attrs = { rows: isEdit ? '3' : '2', maxlength:'1500', autocomplete:'off',
+      placeholder: isEdit ? '' : 'Unutmamam gereken bir şey yaz… (Enter = alt satır)' };
+    if(isEdit) attrs['data-edit'] = '1'; else attrs['data-key'] = dataKey;
+    var ta = el('textarea', attrs);
+    ta.value = text || '';
+    function submit(){
+      var v = ta.value.replace(/\s+$/, '').replace(/^\s*\n/, '');
+      if(!v.trim()) return;
+      if(isEdit) editKey = null;
+      onSave(v);
+    }
+    ta.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && isEdit){ e.preventDefault(); cancelEdit(); }
+      else if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); submit(); }
+    });
+    var btns = [ el('button', { type:'submit', class: isEdit ? 'primary small' : '', text: btnText }) ];
+    if(isEdit) btns.push(el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }));
+    btns.push(el('span', { class:'hintx', text:'Enter: alt satır • Ctrl+Enter: ' + btnText.toLowerCase() }));
+    return el('form', { class:'remform', onsubmit:function(e){ e.preventDefault(); submit(); } }, [
+      ta, el('div', { class:'rbtns' }, btns)
+    ]);
   }
   function remindersBlock(p){
     var list = remList(p);
@@ -938,11 +1158,11 @@
       var ul = el('ul');
       list.forEach(function(r){
         if(editKey === 'r:' + r.id){
-          ul.appendChild(el('li', null, [ editForm(r.text, 300, function(v){ editReminder(p.id, r.id, v); }) ]));
+          ul.appendChild(el('li', { 'data-sid': r.id }, [ remForm(r.text, 'Kaydet', true, function(v){ editReminder(p.id, r.id, v); }) ]));
           return;
         }
-        ul.appendChild(el('li', null, [
-          el('span', { class:'txt', text: r.text }),
+        ul.appendChild(el('li', { 'data-sid': r.id }, [
+          el('span', { class:'txt rtxt', text: r.text }),
           r.createdAt ? el('span', { class:'created-tag', title:'Eklenme Tarihi', text: fmt(r.createdAt) }) : null,
           editBtn('r:' + r.id, 'Hatırlatmayı'),
           delBtn('Hatırlatmayı', function(){ deleteReminder(p.id, r.id); })
@@ -950,7 +1170,7 @@
       });
       det.appendChild(ul);
     }
-    det.appendChild(addForm('Unutmamam gereken bir şey yaz…', 'rem:' + p.id, 300, function(v){ addReminder(p.id, v); }, 'Ekle'));
+    det.appendChild(remForm('', 'Ekle', false, function(v){ addReminder(p.id, v); }, 'rem:' + p.id));
     return det;
   }
 
@@ -962,7 +1182,9 @@
   }
   function deleteProject(pid){
     var p = findProject(pid); if(!p) return;
-    if(confirm('"' + p.title + '" projesi silinsin mi?')){
+    var nt = p.tasks.length, ni = 0;
+    p.tasks.forEach(function(t){ ni += t.items.length; });
+    if(askDelete('"' + snip(p.title, 60) + '" projesi silinsin mi?\n' + nt + ' iş, ' + ni + ' madde, ' + remList(p).length + ' hatırlatma ve tüm notları da silinecek.')){
       state.projects = state.projects.filter(function(x){ return x.id !== pid; });
       commit();
     }
@@ -990,7 +1212,7 @@
   }
   function deleteTask(pid, tid){
     var p = findProject(pid), t = findTask(pid, tid); if(!t) return;
-    if(confirm('"' + t.title + '" işi silinsin mi?')){
+    if(askDelete('"' + snip(t.title, 60) + '" işi silinsin mi?\n' + t.items.length + ' madde de silinecek.')){
       p.tasks = p.tasks.filter(function(x){ return x.id !== tid; });
       commit();
     }
@@ -1018,6 +1240,8 @@
   }
   function deleteItem(pid, tid, iid){
     var t = findTask(pid, tid); if(!t) return;
+    var di = t.items.find(function(x){ return x.id === iid; });
+    if(!di || !askDelete('Bu madde silinsin mi?\n"' + snip(di.text, 80) + '"')) return;
     t.items = t.items.filter(function(x){ return x.id !== iid; });
     commit();
   }
@@ -1027,7 +1251,7 @@
       total += t.items.filter(function(i){ return i.done; }).length;
     }); });
     if(!total) return;
-    if(confirm('Tamamlanan ' + total + ' madde kalıcı olarak silinsin mi?')){
+    if(askDelete('Tamamlanan ' + total + ' madde silinsin mi?')){
       state.projects.forEach(function(p){ p.tasks.forEach(function(t){
         t.items = t.items.filter(function(i){ return !i.done; });
       }); });
@@ -1117,7 +1341,8 @@
     ta.value = obj.note || '';
     function save(){
       var v = ta.value.trim();
-      if(v) obj.note = v; else delete obj.note;
+      if(v) obj.note = v;
+      else if(obj.note){ if(!askDelete('Not silinsin mi?\n"' + snip(obj.note, 80) + '"')) return; delete obj.note; }
       editKey = null; commit();
     }
     ta.addEventListener('keydown', function(e){
@@ -1130,6 +1355,7 @@
     ];
     if(obj.note){
       actions.push(el('button', { type:'button', class:'small', text:'Notu Sil', onclick:function(){
+        if(!askDelete('Not silinsin mi?\n"' + snip(obj.note, 80) + '"')) return;
         delete obj.note; editKey = null; commit();
       } }));
     }
@@ -1201,7 +1427,7 @@
     if(editKey === 'i:' + it.id){
       return el('li', null, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
     }
-    return el('li', null, [
+    return el('li', { 'data-sid': it.id }, [
       el('span', { class:'txt', text: it.text }),
       it.createdAt ? el('span', { class:'created-tag', title:'Eklenme Tarihi', text: fmt(it.createdAt) }) : null,
       el('button', { class:'done-btn', text:'✓ Tamamlandı', onclick:function(){ setDone(p.id, t.id, it.id, true); } }),
@@ -1214,7 +1440,7 @@
     if(editKey === 'i:' + it.id){
       return el('li', null, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
     }
-    return el('li', null, [
+    return el('li', { 'data-sid': it.id }, [
       el('span', { class:'txt', text: it.text }),
       dateBtn(it, timeOnly),
       durBtn(it),
@@ -1278,7 +1504,7 @@
         var ul = el('ul');
         open.forEach(function(it){ ul.appendChild(openRow(p, t, it)); });
 
-        taskNodes.push(el('div', { class:'task' }, [
+        taskNodes.push(el('div', { class:'task', 'data-sid': t.id }, [
           thead, noteBlock(t),
           open.length ? ul : el('div', { class:'empty', text: t.items.length ? 'Tüm maddeler tamamlandı.' : 'Henüz iş maddesi yok.' }),
           addForm('Yeni iş maddesi ekle…', 'item:' + t.id, 200, function(v){ addItem(p.id, t.id, v); })
@@ -1320,7 +1546,7 @@
       var tf = addForm('Bu projeye yeni iş ekle…', 'task:' + p.id, 100, function(v){ addTask(p.id, v); }, 'İş Ekle');
       tf.className += ' addtask';
       projNodes.push(tf);
-      projEl.appendChild(el('div', { class:'project' }, projNodes));
+      projEl.appendChild(el('div', { class:'project', 'data-sid': p.id }, projNodes));
 
       if(doneTaskNodes.length){
         var dn = [ el('div', { class:'phead' }, [
@@ -1364,6 +1590,8 @@
     if(it){ it.text = v; commit(); }
   }
   function deleteWeekItem(id){
+    var wi = weekList(weekKey).find(function(x){ return x.id === id; });
+    if(!wi || !askDelete('Haftalık plandan bu iş silinsin mi?\n"' + snip(wi.text, 80) + '"')) return;
     state.weekly[weekKey] = weekList(weekKey).filter(function(x){ return x.id !== id; });
     commit();
   }
@@ -1406,7 +1634,7 @@
         var sel = el('select', { class:'wsel st-' + st, 'aria-label':'Durum', onchange:function(ev){ it.status = ev.target.value; commit(); } },
           WSTATUS.map(function(o){ return el('option', { value:o[0], text:o[1] }); }));
         sel.value = st;
-        ul.appendChild(el('li', null, [
+        ul.appendChild(el('li', { 'data-sid': it.id }, [
           el('span', { class:'txt wtxt st-' + st, text: it.text }),
           sel,
           st === 'postponed' ? el('button', { class:'small', text:'→ Gelecek haftaya taşı', onclick:function(){ moveWeekItemNext(it.id); } }) : null,
@@ -1449,6 +1677,7 @@
   }
   function removeLeaveDay(key){
     var L = leaveData();
+    if(!askDelete(fmtDay(key) + ' günündeki fazla çalışma işareti kaldırılsın mı?\n(Kazanılan izinden 1 gün düşer' + (L.notes[key] ? ', notu da silinir' : '') + '.)')) return;
     delete L.days[key]; delete L.notes[key];
     commit();
   }
@@ -1917,7 +2146,7 @@
 
   function render(focusKey){
     updateStats();
-    ['tasks', 'cal', 'dash'].forEach(function(k){ document.getElementById('tab-' + k).hidden = (k !== tab); });
+    ['tasks', 'cal', 'dash', 'search'].forEach(function(k){ document.getElementById('tab-' + k).hidden = (k !== tab); });
     Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
       var on = b.getAttribute('data-tab') === tab;
       b.classList.toggle('active', on);
@@ -1926,6 +2155,7 @@
 
     if(tab === 'tasks') renderTasks();
     else if(tab === 'cal') renderCalendar();
+    else if(tab === 'search') renderSearch();
     else renderDashboard();
 
     var target = null;
@@ -1946,6 +2176,7 @@
       tab = b.getAttribute('data-tab');
       editKey = null;
       render();
+      if(tab === 'search'){ var si = document.getElementById('searchInput'); si.focus(); si.select(); }
     });
   });
   document.getElementById('projectForm').addEventListener('submit', function(e){
@@ -1955,6 +2186,16 @@
     inp.value = '';
   });
   document.getElementById('clearDone').addEventListener('click', clearDone);
+  document.getElementById('searchInput').addEventListener('input', function(e){ searchQ = e.target.value; renderSearch(); });
+  document.getElementById('searchInput').addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && searchQ){ e.preventDefault(); searchQ = ''; renderSearch(); }
+  });
+  /* "/" veya Ctrl+K ile her yerden aramaya geç */
+  document.addEventListener('keydown', function(e){
+    var t = e.target, typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    if((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)){ e.preventDefault(); openSearch(); }
+    else if(e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey){ e.preventDefault(); openSearch(); }
+  });
 
   var now0 = new Date();
   calYear = now0.getFullYear(); calMonth = now0.getMonth(); selDay = dayKey(now0.getTime());
