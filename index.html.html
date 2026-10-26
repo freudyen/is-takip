@@ -1,0 +1,2211 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İş Takip (Modüler JSON)</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --sub:#f7f8fa; --text:#1f2430; --muted:#6b7280; --line:#e3e6ec;
+    --accent:#3b6cf6; --accent-text:#fff; --ok:#16a34a; --ok-bg:#e8f6ee; --danger:#dc2626; --warn:#b45309; --mark:#fde68a; --mark-text:#1f2430;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14161b; --card:#1d2027; --sub:#23272f; --text:#e8eaef; --muted:#9097a5; --line:#2c303a;
+      --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24; --mark:#854d0e; --mark-text:#fff7d6;
+    }
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1150px;margin:0 auto;padding:24px 16px 48px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+  h1{margin:0;font-size:24px}
+  .stats{color:var(--muted);font-size:14px}
+  .savebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:10px;font-size:14px}
+  .savebar .status{flex:1;min-width:180px}
+  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.err{color:var(--danger)}
+
+  .tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--line);overflow-x:auto}
+  .tabs button{border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:none;padding:10px 16px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .tabs button:hover{border-color:transparent;border-bottom-color:var(--accent)}
+  .tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+  .newproject{display:flex;gap:8px;margin-bottom:24px}
+  input[type=text],select{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+  select{flex:0 1 auto}
+  input[type=text]:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:default}
+  button:disabled:hover{border-color:var(--line)}
+  .primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:600}
+  .layout{display:grid;grid-template-columns:3fr 2fr;gap:24px;align-items:start}
+  @media (max-width:860px){.layout{grid-template-columns:1fr}}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 12px}
+  .col{display:flex;flex-direction:column;gap:16px}
+  .project{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .phead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .phead h3{margin:0;font-size:18px;flex:1;min-width:120px;word-break:break-word}
+  .task{background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}
+  .thead{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+  .thead h4{margin:0;font-size:15px;flex:1;min-width:120px;word-break:break-word}
+  .thead h4::before{content:"▸ ";color:var(--muted)}
+  .count{font-size:12px;color:var(--muted);background:var(--bg);border-radius:20px;padding:2px 8px;white-space:nowrap}
+  .icon{padding:4px 8px;font-size:13px;color:var(--muted)}
+  .icon.del:hover{color:var(--danger);border-color:var(--danger)}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+  li:first-child{border-top:0}
+  li .txt{flex:1 1 160px;word-break:break-word}
+  li .editform,li .noteform{flex:1 0 100%}
+  .done-btn{background:var(--ok-bg);color:var(--ok);border-color:transparent;font-weight:600;font-size:13px;padding:5px 10px;white-space:nowrap}
+  .done-btn:hover{border-color:var(--ok)}
+  .add{display:flex;gap:8px;margin-top:8px}
+  .add input{padding:8px 10px}
+  .addtask{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+  .empty{color:var(--muted);font-size:14px;padding:4px 0}
+  .done-card .txt{text-decoration:line-through;color:var(--muted)}
+  .tag{font-size:12px;color:var(--muted);background:var(--bg);border-radius:6px;padding:2px 6px;white-space:nowrap}
+  .created-tag{font-size:11px;color:var(--muted);background:transparent;padding:1px 4px;white-space:nowrap}
+  .small{font-size:13px;padding:5px 9px}
+  .editform{display:flex;gap:6px;flex:1;min-width:0;flex-wrap:wrap}
+  .editform input{padding:6px 9px;min-width:140px}
+  .editform .err{flex:1 0 100%;color:var(--danger);font-size:13px}
+  .editform .err:empty{display:none}
+  .dur{font-size:12px;padding:3px 8px;color:var(--muted);white-space:nowrap}
+  .dur.set{background:var(--sub);color:var(--text);font-weight:600;border-color:var(--accent)}
+
+  .note{white-space:pre-wrap;word-break:break-word;flex:1 0 100%;font-size:13px;color:var(--muted);background:var(--bg);border-left:3px solid var(--accent);border-radius:6px;padding:6px 10px;margin:4px 0}
+  .noteform{display:flex;flex-direction:column;gap:6px;margin:4px 0}
+  .noteform textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;resize:vertical}
+  .noteform textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .noteactions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .noteactions .hintx{font-size:12px;color:var(--muted)}
+
+  .calwrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;align-items:start}
+  @media (max-width:860px){.calwrap{grid-template-columns:1fr}}
+  .calhead{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .calhead h3{margin:0;font-size:18px;flex:1;text-align:center}
+  .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+  .dow{text-align:center;font-size:12px;color:var(--muted);padding:4px 0}
+  .blank{min-height:60px}
+  .day{min-height:60px;padding:6px;text-align:left;display:flex;flex-direction:column;gap:4px;align-items:flex-start;justify-content:flex-start;background:var(--card)}
+  .day .num{font-weight:600;font-size:14px}
+  .day .badge{font-size:11px;background:var(--ok-bg);color:var(--ok);border-radius:10px;padding:1px 6px;font-weight:600}
+  .day.today{box-shadow:inset 0 0 0 2px var(--accent)}
+  .day.sel{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+  .day.sel .badge{background:var(--accent-text);color:var(--accent)}
+  @media (max-width:520px){.day,.blank{min-height:48px;padding:4px}}
+  .daytitle{margin:0 0 4px;font-size:18px}
+  .daysum{color:var(--muted);font-size:14px;margin-bottom:12px}
+
+  .dashbar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .tile .v{font-size:26px;font-weight:700;line-height:1.2}
+  .tile .l{font-size:13px;color:var(--muted)}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:20px}
+  .panel h2{margin-bottom:8px}
+  .chart{display:flex;align-items:flex-end;gap:4px;height:140px}
+  .chart .cc{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+  .chart .bar{width:100%;max-width:28px;background:var(--accent);border-radius:4px 4px 0 0}
+  .chart .bar.zero{background:var(--line)}
+  .chart .val{font-size:11px;color:var(--muted);height:16px;line-height:16px}
+  .chart .lbl{font-size:11px;color:var(--muted);margin-top:4px}
+  .tblwrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:20px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{padding:9px 12px;text-align:left;border-top:1px solid var(--line);vertical-align:top}
+  thead th{border-top:0;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);white-space:nowrap}
+  td.nw{white-space:nowrap}
+  td .rnote{font-size:12px;color:var(--muted);white-space:pre-wrap;margin-top:2px}
+  .editform input[type=datetime-local]{padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+  .rowacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .weekly{margin-top:28px}
+  .wtxt.st-done{text-decoration:line-through;color:var(--ok)}
+  .wtxt.st-failed,.wtxt.st-cancelled{text-decoration:line-through;color:var(--muted)}
+  .wtxt.st-postponed{color:var(--warn)}
+  .wsel{flex:0 0 auto;padding:5px 8px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-family:inherit}
+  .wsel.st-done{color:var(--ok);border-color:var(--ok)}
+  .wsel.st-postponed{color:var(--warn);border-color:var(--warn)}
+  .wsel.st-failed{color:var(--danger);border-color:var(--danger)}
+  .wsel.st-cancelled{color:var(--muted)}
+  .manual{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:20px}
+  .manual h2{margin-bottom:10px}
+  .mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  .mfield{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .mfield.wide{grid-column:1/-1}
+  .mfield label{font-size:12px;color:var(--muted)}
+  .mfield select,.mfield input,.mfield textarea{width:100%;flex:none;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+  .mfield textarea{resize:vertical}
+  .mfield select:focus,.mfield input:focus,.mfield textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .mactions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  .mmsg{font-size:13px}
+  .mmsg.ok{color:var(--ok)} .mmsg.err{color:var(--danger)}
+  .day .xmark{font-size:11px;background:var(--bg);color:var(--warn);border-radius:10px;padding:1px 6px;font-weight:600}
+  .day.sel .xmark{background:var(--accent-text);color:var(--accent)}
+  .xbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:12px;font-size:14px}
+  .xbox select{flex:0 0 auto;padding:5px 8px;font-size:13px}
+  .leavetop{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  .leaveval{font-size:30px;font-weight:700;line-height:1.2}
+  .xbox input{flex:1 1 180px;padding:5px 8px;font-size:13px}
+  .lrow .dt{flex:0 0 auto;min-width:150px}
+  .lrow input{flex:1 1 200px;padding:6px 9px;font-size:14px}
+  .leaveuse{align-items:center;flex-wrap:wrap}
+  .leaveuse input{flex:0 0 90px;padding:8px 10px}
+  .reminders{background:var(--sub);border:1px dashed var(--line);border-radius:10px;padding:8px 12px;margin-top:8px}
+  .reminders summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
+  .reminders summary::-webkit-details-marker{display:none}
+  .reminders summary::before{content:"▸";font-size:11px}
+  .reminders[open] summary::before{content:"▾"}
+  .reminders ul{margin-top:6px}
+  .reminders li{font-size:14px}
+  .hint{margin-top:28px;color:var(--muted);font-size:13px;text-align:center}
+  /* Çok satırlı hatırlatma */
+  .rtxt{white-space:pre-wrap}
+  .remform{display:flex;flex-direction:column;gap:6px;margin-top:8px;flex:1 0 100%}
+  .remform textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;resize:vertical;min-height:64px}
+  .remform textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .remform .rbtns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .remform .hintx{font-size:12px;color:var(--muted)}
+  /* Global arama */
+  .searchbox{margin-bottom:14px}
+  .searchbox input{width:100%;padding:12px 14px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);font-family:inherit}
+  .searchbox input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .sgroup{margin-bottom:18px}
+  .sgroup h3{margin:0 0 8px;font-size:15px}
+  .sgroup h3 .count{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
+  .sres{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+  .sres li{display:block;padding:0}
+  .sres button.sitem{display:block;width:100%;text-align:left;padding:9px 12px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;cursor:pointer}
+  .sres button.sitem:hover,.sres button.sitem:focus-visible{border-color:var(--accent)}
+  .sres .smain{display:block;word-break:break-word;white-space:pre-wrap}
+  .sres .smeta{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+  .sres .snote{display:block;font-size:13px;color:var(--muted);margin-top:4px;white-space:pre-wrap;word-break:break-word;border-left:3px solid var(--accent);padding-left:8px}
+  mark.hl{background:var(--mark);color:var(--mark-text);border-radius:3px;padding:0 1px}
+  @keyframes flashbg{0%,60%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 3px transparent}}
+  .flash{animation:flashbg 2.2s ease-out;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📋 İş Takip</h1>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="savebar" id="savebar"></div>
+
+  <!-- Gizli Dosya Yükleme Girdisi (Import İçin) -->
+  <input type="file" id="importFileInput" accept=".json" style="display:none">
+
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="tasks" class="active" aria-selected="true">📋 İşler</button>
+    <button type="button" data-tab="cal" aria-selected="false">📅 Takvim</button>
+    <button type="button" data-tab="dash" aria-selected="false">📊 Dashboard</button>
+    <button type="button" data-tab="search" aria-selected="false" title="Ara ( / tuşu )">🔍 Ara</button>
+  </nav>
+
+  <div id="tab-tasks">
+    <form class="newproject" id="projectForm">
+      <input type="text" id="projectInput" placeholder="Yeni proje adı (örn. Web Sitesi Yenileme)" maxlength="80" autocomplete="off">
+      <button class="primary" type="submit">Proje Ekle</button>
+    </form>
+
+    <div class="dashbar" id="taskFilterBar"></div>
+
+    <div class="layout">
+      <section>
+        <h2>Devam Eden İşler</h2>
+        <div class="col" id="projects"></div>
+      </section>
+      <section>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h2 style="margin:0">Tamamlandı</h2>
+          <button class="small" id="clearDone">Tamamlananları Temizle</button>
+        </div>
+        <div class="col" id="doneList"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="tab-cal" hidden><div id="calView"></div></div>
+  <div id="tab-dash" hidden><div id="dashView"></div></div>
+  <div id="tab-search" hidden>
+    <div class="searchbox"><input type="search" id="searchInput" placeholder="Ara: proje, iş, madde, not, hatırlatma, haftalık plan…" maxlength="100" autocomplete="off" aria-label="Genel arama"></div>
+    <div id="searchView"></div>
+  </div>
+
+  <p class="hint">Veriler bağımsız bir <code>.json</code> dosyasında saklanır.</p>
+</div>
+
+<script>
+(function(){
+  var state = { projects: [], weekly: {}, leave: { days: {}, adjust: 0, notes: {} } };
+  var weekKey = '';
+  var tab = 'tasks';
+  var editKey = null;
+  var dashFilter = '';
+  var dashRange = { on: false, from: '', to: '' };
+  var tasksFilter = '';
+  var calYear, calMonth, selDay;
+  var jsonHandle = null;
+  var folderHandle = null;
+  var AUTO_NAME = 'is-takip-data.json';
+  var canWrite = false;
+  var needsPermission = false;
+  var dirty = false;
+  var saveError = '';
+  var saveTimer = null;
+  var hasFS = typeof window.showOpenFilePicker === 'function';
+
+  var MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  var DOW = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+
+  function normalize(s){
+    var w = (s && s.weekly && typeof s.weekly === 'object' && !Array.isArray(s.weekly)) ? s.weekly : {};
+    var lv = (s && s.leave && typeof s.leave === 'object' && !Array.isArray(s.leave)) ? s.leave : {};
+    var L = {
+      days: (lv.days && typeof lv.days === 'object' && !Array.isArray(lv.days)) ? lv.days : {},
+      adjust: isFinite(+lv.adjust) ? +lv.adjust : 0,
+      notes: (lv.notes && typeof lv.notes === 'object' && !Array.isArray(lv.notes)) ? lv.notes : {}
+    };
+    if(s && Array.isArray(s.projects)) return { projects: s.projects, weekly: w, leave: L };
+    return { projects: [], weekly: {}, leave: { days: {}, adjust: 0, notes: {} } };
+  }
+
+  /* ---------- IndexedDB Bağlantı Hafızası ---------- */
+  function idb(){
+    return new Promise(function(res, rej){
+      var r = indexedDB.open('is-takip-json-db', 1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore('h'); };
+      r.onsuccess = function(){ res(r.result); };
+      r.onerror = function(){ rej(r.error); };
+    });
+  }
+  function idbGet(key){
+    return idb().then(function(db){
+      return new Promise(function(res){
+        var q = db.transaction('h').objectStore('h').get(key || 'json_file');
+        q.onsuccess = function(){ res(q.result || null); };
+        q.onerror = function(){ res(null); };
+      });
+    }).catch(function(){ return null; });
+  }
+  function idbSet(h, key){
+    return idb().then(function(db){
+      return new Promise(function(res){
+        var tx = db.transaction('h', 'readwrite');
+        tx.objectStore('h').put(h, key || 'json_file');
+        tx.oncomplete = function(){ res(); };
+        tx.onerror = function(){ res(); };
+      });
+    }).catch(function(){});
+  }
+
+  /* ---------- JSON Dosyasına Yazma ---------- */
+  function writeToJsonFile(){
+    if(!jsonHandle || !canWrite) return Promise.resolve(false);
+    return jsonHandle.createWritable().then(function(w){
+      return w.write(JSON.stringify(state, null, 2)).then(function(){ return w.close(); });
+    }).then(function(){
+      dirty = false; saveError = ''; updateBar(); return true;
+    }).catch(function(e){
+      saveError = 'JSON dosyasına yazılamadı: ' + (e && e.message ? e.message : e);
+      updateBar(); return false;
+    });
+  }
+
+  function changed(){
+    dirty = true; saveError = '';
+    updateBar();
+    if(canWrite){
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(writeToJsonFile, 250);
+    }
+    if(drive.on) driveQueue();
+  }
+
+  /* 1. SIFIRDAN DOSYA OLUŞTURMA */
+  function createNewJsonFile(){
+    window.showSaveFilePicker({
+      suggestedName: 'is-takip-data.json',
+      types: [{ description: 'JSON Veri Dosyası', accept: { 'application/json': ['.json'] } }]
+    }).then(function(h){
+      jsonHandle = h; canWrite = true; needsPermission = false;
+      return idbSet(h).then(function(){
+        dirty = true;
+        return writeToJsonFile().then(function(){ render(); });
+      });
+    }).catch(function(e){
+      if(e && e.name === 'AbortError') return;
+      saveError = 'Dosya oluşturulmadı.';
+      updateBar();
+    });
+  }
+
+  /* 2. VAROLAN DOSYAYA BAĞLANMA (OTOMATİK KAYIT İÇİN) */
+  function connectExistingJsonFile(){
+    window.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: 'JSON Veri Dosyası', accept: { 'application/json': ['.json'] } }]
+    }).then(function(arr){
+      var h = arr[0];
+      return h.getFile().then(function(f){ return f.text(); }).then(function(txt){
+        if(txt.trim()){
+          try { state = normalize(JSON.parse(txt)); } catch(e){
+            alert('Geçersiz JSON dosyası.'); return;
+          }
+        }
+        jsonHandle = h; canWrite = true; needsPermission = false;
+        return idbSet(h).then(function(){
+          render();
+          updateBar();
+        });
+      });
+    }).catch(function(e){
+      if(e && e.name === 'AbortError') return;
+      saveError = 'Dosyaya bağlanılamadı.';
+      updateBar();
+    });
+  }
+
+  /* 2b. KLASÖRE BAĞLAN: seçilen klasördeki is-takip-data.json otomatik bulunur ve her açılışta bağlanır */
+  function attachFile(fh, writeNow){
+    jsonHandle = fh; canWrite = true; needsPermission = false; saveError = ''; dirty = !!writeNow;
+    return idbSet(fh, 'json_file').then(function(){
+      render();
+      if(writeNow) return writeToJsonFile();
+      updateBar(); return true;
+    }).then(function(){ return true; });
+  }
+  function connectFolderFile(dir, allowCreate){
+    return dir.getFileHandle(AUTO_NAME).then(function(fh){
+      return fh.getFile().then(function(f){ return f.text(); }).then(function(txt){
+        if(txt.trim()){
+          try { state = normalize(JSON.parse(txt)); } catch(e){
+            saveError = '"' + AUTO_NAME + '" geçerli bir JSON dosyası değil.'; updateBar(); return false;
+          }
+        }
+        return attachFile(fh, false);
+      });
+    }, function(err){
+      if(err && err.name === 'NotFoundError' && allowCreate){
+        if(!confirm('Seçtiğiniz klasörde "' + AUTO_NAME + '" bulunamadı. Mevcut verilerle yeni bir dosya oluşturulsun mu?')) return false;
+        return dir.getFileHandle(AUTO_NAME, { create: true }).then(function(fh){ return attachFile(fh, true); });
+      }
+      return false;
+    });
+  }
+  function connectFolder(){
+    window.showDirectoryPicker({ id: 'is-takip-folder', mode: 'readwrite' }).then(function(dir){
+      folderHandle = dir;
+      return idbSet(dir, 'folder').then(function(){ return connectFolderFile(dir, true); });
+    }).catch(function(e){
+      if(e && e.name === 'AbortError') return;
+      saveError = (e && e.name === 'SecurityError')
+        ? 'Tarayıcı bu klasörü engelliyor (Masaüstü / Belgeler / İndirilenler klasörünün kendisi seçilemez). Bir alt klasör kullanın.'
+        : 'Klasöre bağlanılamadı: ' + (e && e.message ? e.message : e);
+      updateBar();
+    });
+  }
+
+  /* 3. İÇE AKTAR (IMPORT - YALNIZCA VERİYİ YÜKLER) */
+  function importJsonFile(){
+    if(driveFlag()){ document.getElementById('importFileInput').click(); return; }
+    /* Dosya seçici destekleniyorsa dosyayı onunla aç: hem veri yüklenir hem
+       (henüz bağlı dosya yoksa) otomatik kayıt bu dosyaya bağlanır. */
+    if(hasFS){
+      window.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: 'JSON Veri Dosyası', accept: { 'application/json': ['.json'] } }]
+      }).then(function(arr){
+        var h = arr[0];
+        return h.getFile().then(function(f){ return f.text(); }).then(function(txt){
+          var data;
+          try { data = normalize(JSON.parse(txt)); } catch(err){
+            alert('Hata: Seçilen dosya geçerli bir JSON formatında değil.'); return;
+          }
+          state = data;
+          /* İçe aktarılan dosya her zaman bağlı dosya olur ve konumu hatırlanır. */
+          jsonHandle = h; canWrite = true; needsPermission = false; dirty = false; saveError = '';
+          return idbSet(h).then(function(){
+            render(); updateBar();
+            alert('Veriler yüklendi. "' + h.name + '" dosyası hatırlandı; sonraki açılışlarda otomatik bağlanacak.');
+          });
+        });
+      }).catch(function(e){
+        if(e && e.name === 'AbortError') return;
+        saveError = 'Dosya içe aktarılamadı.';
+        updateBar();
+      });
+      return;
+    }
+    document.getElementById('importFileInput').click();
+  }
+
+  document.getElementById('importFileInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt){
+      try {
+        var data = JSON.parse(evt.target.result);
+        state = normalize(data);
+        render();
+        changed();
+        alert('Veriler başarıyla yükledi!');
+      } catch(err) {
+        alert('Hata: Seçilen dosya geçerli bir JSON formatında değil.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  /* 4. DIŞA AKTAR (EXPORT / YEDEK) */
+  function downloadBackup(){
+    var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'is-takip-data.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  }
+
+  function enablePermission(){
+    if(!jsonHandle && folderHandle){
+      folderHandle.requestPermission({ mode: 'readwrite' }).then(function(p){
+        if(p === 'granted') return connectFolderFile(folderHandle, false).then(function(ok){ if(!ok){ needsPermission = false; updateBar(); } });
+        updateBar();
+      }).catch(function(){ updateBar(); });
+      return;
+    }
+    if(!jsonHandle) return;
+    jsonHandle.requestPermission({ mode: 'readwrite' }).then(function(p){
+      if(p === 'granted'){
+        canWrite = true; needsPermission = false;
+        return jsonHandle.getFile().then(function(f){ return f.text(); }).then(function(txt){
+          if(txt.trim()){ try { state = normalize(JSON.parse(txt)); } catch(e){} }
+          render();
+          updateBar();
+        }).catch(function(){
+          /* Dosya taşınmış / silinmiş: klasörden yeniden bulmayı dene */
+          jsonHandle = null; canWrite = false;
+          if(folderHandle) return connectFolderFile(folderHandle, false).then(function(ok){ if(!ok){ needsPermission = false; updateBar(); } });
+          needsPermission = false; updateBar();
+        });
+      } else { updateBar(); }
+    }).catch(function(){ updateBar(); });
+  }
+
+  function initFileHandle(){
+    if(!hasFS || driveFlag()){ updateBar(); return; }
+    /* Tarayıcının kayıtlı dosya bağlantısını kendiliğinden silmesini zorlaştır. */
+    try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+    /* İzin her açılışta yeniden istenebilir; yazma izni için kullanıcı hareketi gerekir.
+       İlk tıklamada izni otomatik iste, ayrı düğmeye basmaya gerek kalmasın. */
+    var autoAsk = function(e){
+      if(needsPermission && !(e.target.closest && e.target.closest('#savebar'))) enablePermission();
+      if(canWrite) document.removeEventListener('click', autoAsk, true);
+    };
+    document.addEventListener('click', autoAsk, true);
+    function tryFolder(){
+      if(!folderHandle){ updateBar(); return Promise.resolve(); }
+      return folderHandle.queryPermission({ mode: 'readwrite' }).then(function(p){
+        if(p === 'granted') return connectFolderFile(folderHandle, false).then(function(ok){ if(!ok) updateBar(); });
+        needsPermission = true; updateBar();
+      });
+    }
+    idbGet('folder').then(function(d){
+      folderHandle = d || null;
+      return idbGet('json_file');
+    }).then(function(h){
+      if(!h) return tryFolder();
+      jsonHandle = h;
+      return h.queryPermission({ mode: 'readwrite' }).then(function(p){
+        if(p === 'granted'){
+          canWrite = true;
+          return h.getFile().then(function(f){ return f.text(); }).then(function(txt){
+            if(txt.trim()){ try { state = normalize(JSON.parse(txt)); } catch(e){} }
+            render();
+            updateBar();
+          }).catch(function(){ jsonHandle = null; canWrite = false; return tryFolder(); });
+        } else {
+          needsPermission = true;
+          updateBar();
+        }
+      });
+    }).catch(function(){ updateBar(); });
+  }
+
+  /* DRIVE:BEGIN ---------- Google Drive ile kayıt ---------- */
+  /* Google Cloud'dan aldığınız OAuth istemci kimliğini buraya yazabilirsiniz;
+     boş bırakırsanız sayfadaki "Drive ayarı" kutusundan girilir (tarayıcıda saklanır). */
+  var GOOGLE_CLIENT_ID = '';
+  var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  var DRIVE_FOLDER = 'İş Takip', DRIVE_BACKUPS = 'Yedekler', DRIVE_FILE = 'is-takip-data.json', DRIVE_KEEP = 30;
+  var drive = {
+    on: false, busy: false, connecting: false, needsLogin: false, again: false,
+    err: '', info: '', working: '', choice: null, setup: false,
+    token: null, exp: 0, tokenP: null,
+    folderId: null, backupsId: null, fileId: null, md5: null,
+    rev: 0, savedRev: 0, timer: null, backupDay: ''
+  };
+
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { if(v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch(e){} }
+  function errMsg(e){ return e && e.message ? e.message : String(e); }
+  function authErr(m){ var e = new Error(m); e.auth = true; return e; }
+  function driveClientId(){ return (GOOGLE_CLIENT_ID || lsGet('is-takip-gcid') || '').trim(); }
+  function driveFlag(){ return lsGet('is-takip-drive') === '1'; }
+  function driveDirty(){ return drive.on && drive.rev !== drive.savedRev; }
+
+  function waitGis(){
+    return new Promise(function(res, rej){
+      var n = 0;
+      (function chk(){
+        if(window.google && window.google.accounts && window.google.accounts.oauth2) return res(window.google.accounts.oauth2);
+        if(++n > 80) return rej(authErr('Google giriş betiği yüklenemedi. İnternet bağlantınızı kontrol edin.'));
+        setTimeout(chk, 100);
+      })();
+    });
+  }
+
+  function driveToken(interactive){
+    if(drive.token && Date.now() < drive.exp - 60000) return Promise.resolve(drive.token);
+    if(drive.tokenP) return drive.tokenP;
+    var id = driveClientId();
+    if(!id) return Promise.reject(authErr('Google istemci kimliği girilmemiş.'));
+    drive.tokenP = waitGis().then(function(oauth){
+      return new Promise(function(res, rej){
+        var tc = oauth.initTokenClient({
+          client_id: id, scope: DRIVE_SCOPE,
+          callback: function(r){
+            if(!r || r.error || !r.access_token) return rej(authErr((r && r.error) || 'Giriş yapılamadı.'));
+            drive.token = r.access_token; drive.exp = Date.now() + (+r.expires_in || 3600) * 1000;
+            res(r.access_token);
+          },
+          error_callback: function(e){ rej(authErr((e && (e.type || e.message)) || 'Giriş yapılamadı.')); }
+        });
+        tc.requestAccessToken({ prompt: interactive ? '' : 'none' });
+      });
+    }).then(function(t){ drive.tokenP = null; return t; }, function(e){ drive.tokenP = null; throw e; });
+    return drive.tokenP;
+  }
+
+  function driveFetch(url, opts, interactive, retried){
+    return driveToken(!!interactive).then(function(t){
+      var o = Object.assign({}, opts || {});
+      o.headers = Object.assign({}, o.headers, { Authorization: 'Bearer ' + t });
+      return fetch(url, o);
+    }).then(function(r){
+      if(r.status === 401 && !retried){ drive.token = null; return driveFetch(url, opts, interactive, true); }
+      if(!r.ok){ var e = new Error('Drive hatası (' + r.status + ')'); e.status = r.status; throw e; }
+      return r;
+    });
+  }
+
+  var D_API = 'https://www.googleapis.com/drive/v3/files';
+  var D_UP = 'https://www.googleapis.com/upload/drive/v3/files';
+  function dEsc(s){ return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+  function dList(q, extra){
+    return driveFetch(D_API + '?spaces=drive&pageSize=100&fields=' + encodeURIComponent('files(id,name,md5Checksum,createdTime)') +
+      '&q=' + encodeURIComponent(q) + (extra || '')).then(function(r){ return r.json(); }).then(function(j){ return j.files || []; });
+  }
+  function dFolder(name, parent){
+    var q = "mimeType='application/vnd.google-apps.folder' and name='" + dEsc(name) + "' and trashed=false and '" + (parent || 'root') + "' in parents";
+    return dList(q).then(function(fs){
+      if(fs.length) return fs[0].id;
+      var meta = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+      if(parent) meta.parents = [parent];
+      return driveFetch(D_API + '?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) })
+        .then(function(r){ return r.json(); }).then(function(j){ return j.id; });
+    });
+  }
+  function dCreate(name, parent, text){
+    var b = 'ist' + uid();
+    var body = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify({ name: name, parents: [parent], mimeType: 'application/json' }) +
+      '\r\n--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + text + '\r\n--' + b + '--';
+    return driveFetch(D_UP + '?uploadType=multipart&fields=id,md5Checksum', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: body })
+      .then(function(r){ return r.json(); });
+  }
+  function driveEnsure(){
+    if(drive.folderId && drive.backupsId) return Promise.resolve();
+    return dFolder(DRIVE_FOLDER).then(function(fid){
+      drive.folderId = fid; return dFolder(DRIVE_BACKUPS, fid);
+    }).then(function(bid){
+      drive.backupsId = bid;
+      return dList("name='" + dEsc(DRIVE_FILE) + "' and '" + drive.folderId + "' in parents and trashed=false");
+    }).then(function(fs){
+      if(fs.length){ drive.fileId = fs[0].id; drive.md5 = fs[0].md5Checksum; }
+    });
+  }
+  function driveRead(){ return driveFetch(D_API + '/' + drive.fileId + '?alt=media').then(function(r){ return r.text(); }); }
+  function driveMeta(){ return driveFetch(D_API + '/' + drive.fileId + '?fields=id,md5Checksum,trashed').then(function(r){ return r.json(); }); }
+  function driveWrite(text){
+    function create(){ return dCreate(DRIVE_FILE, drive.folderId, text).then(function(m){ drive.fileId = m.id; return m; }); }
+    if(!drive.fileId) return create();
+    return driveFetch(D_UP + '/' + drive.fileId + '?uploadType=media&fields=id,md5Checksum', { method: 'PATCH', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: text })
+      .then(function(r){ return r.json(); })
+      .catch(function(e){ if(e.status === 404){ drive.fileId = null; return create(); } throw e; });
+  }
+
+  /* Günün ilk kaydında, üzerine yazılmadan önceki Drive sürümü Yedekler klasörüne kopyalanır; son 30 yedek tutulur. */
+  function drivePrune(prefix){
+    return dList("'" + drive.backupsId + "' in parents and trashed=false", '&orderBy=' + encodeURIComponent('createdTime desc')).then(function(fs){
+      fs = fs.filter(function(f){ return f.name.indexOf(prefix) === 0; });
+      return fs.slice(DRIVE_KEEP).reduce(function(p, f){
+        return p.then(function(){ return driveFetch(D_API + '/' + f.id, { method: 'DELETE' }).catch(function(){}); });
+      }, Promise.resolve());
+    });
+  }
+  function driveDailyBackup(){
+    var day = dayKey(Date.now());
+    if(drive.backupDay === day || !drive.fileId) return Promise.resolve();
+    var name = 'is-takip-yedek-' + day + '.json';
+    return dList("name='" + dEsc(name) + "' and '" + drive.backupsId + "' in parents and trashed=false").then(function(fs){
+      if(fs.length){ drive.backupDay = day; return; }
+      return driveRead().then(function(txt){
+        if(!txt || !txt.trim()){ drive.backupDay = day; return; }
+        return dCreate(name, drive.backupsId, txt).then(function(){ drive.backupDay = day; return drivePrune('is-takip-yedek-'); });
+      });
+    }).catch(function(e){ if(e.status === 404){ drive.fileId = null; return; } throw e; });
+  }
+  function driveSnapshotRemote(){
+    if(!drive.fileId) return Promise.resolve();
+    return driveRead().then(function(txt){
+      if(!txt || !txt.trim()) return;
+      return dCreate('is-takip-onceki-' + dayKey(Date.now()) + '-' + Date.now().toString(36) + '.json', drive.backupsId, txt).then(function(){ return drivePrune('is-takip-onceki-'); });
+    });
+  }
+
+  function driveFail(e){
+    if(e && (e.auth || e.status === 401 || e.status === 403)) drive.needsLogin = true;
+    drive.err = 'Drive\'a kaydedilemedi: ' + errMsg(e);
+  }
+  function driveSave(){
+    if(!drive.on || drive.choice) return Promise.resolve();
+    if(drive.busy){ drive.again = true; return Promise.resolve(); }
+    drive.busy = true; drive.err = '';
+    var rev = drive.rev, text = JSON.stringify(state, null, 2);
+    updateBar();
+    return driveToken(false).then(driveEnsure).then(function(){
+      return driveDailyBackup().then(function(){ return driveWrite(text); }).then(function(m){
+        if(m.md5Checksum) return m;
+        return driveMeta();
+      }).then(function(m){
+        drive.md5 = m.md5Checksum || null; drive.savedRev = rev; drive.needsLogin = false;
+      });
+    }).catch(driveFail).then(function(){
+      drive.busy = false; updateBar();
+      if(drive.again){ drive.again = false; setTimeout(driveSave, 300); }
+    });
+  }
+  function driveQueue(){
+    drive.info = '';
+    drive.rev++;
+    clearTimeout(drive.timer);
+    drive.timer = setTimeout(driveSave, 1500);
+  }
+
+  /* Elle yedek: o anki verinin tarihli bir kopyasını Yedekler klasörüne yazar (günlük yedekten bağımsız). */
+  function driveBackupNow(){
+    if(!drive.on || drive.working) return Promise.resolve();
+    drive.working = 'Drive\'a yedek alınıyor…'; drive.err = ''; drive.info = ''; updateBar();
+    var d = new Date(), name = 'is-takip-elle-' + dayKey(d.getTime()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.json';
+    var text = JSON.stringify(state, null, 2);
+    return driveToken(true).then(driveEnsure).then(function(){
+      return dCreate(name, drive.backupsId, text);
+    }).then(function(){
+      return drivePrune('is-takip-elle-');
+    }).then(function(){
+      drive.info = '✓ Yedek alındı: ' + DRIVE_FOLDER + ' › ' + DRIVE_BACKUPS + ' › ' + name;
+    }).catch(function(e){ drive.err = 'Yedek alınamadı: ' + errMsg(e); if(e && e.auth) drive.needsLogin = true; })
+      .then(function(){ drive.working = ''; updateBar(); });
+  }
+
+  function driveAdopt(remoteState, md5){
+    state = remoteState; drive.md5 = md5; drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
+    drive.rev = 0; drive.savedRev = 0; editKey = null; dirty = false;
+    lsSet('is-takip-drive', '1');
+    render();
+  }
+  function driveLoadRemote(){
+    return driveMeta().then(function(meta){ return driveRead().then(function(txt){ return { meta: meta, txt: txt }; }); }).then(function(x){
+      var txt = x.txt, meta = x.meta;
+      var r; try { r = normalize(JSON.parse(txt)); } catch(e){ throw new Error('Drive\'daki dosya geçerli bir JSON değil.'); }
+      return driveAdopt(r, meta.md5Checksum);
+    });
+  }
+  function driveKeepLocal(){
+    return driveSnapshotRemote().then(function(){ return drive.fileId ? driveMeta() : { md5Checksum: null }; }).then(function(m){
+      drive.md5 = m.md5Checksum; drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
+      lsSet('is-takip-drive', '1');
+      drive.rev++;
+      return driveSave();
+    });
+  }
+
+  function driveConnect(){
+    drive.err = ''; drive.connecting = true; updateBar();
+    return driveToken(true).then(driveEnsure).then(function(){
+      if(!drive.fileId) return driveKeepLocal();
+      return driveRead().then(function(txt){
+        var remote = null; try { remote = normalize(JSON.parse(txt)); } catch(e){}
+        var localEmpty = !state.projects.length && !Object.keys((state.leave && state.leave.days) || {}).length;
+        if(remote && (localEmpty || JSON.stringify(remote) === JSON.stringify(normalize(state)))) return driveAdopt(remote, drive.md5);
+        drive.choice = { type: 'connect', remoteOk: !!remote };
+      });
+    }).catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
+  }
+  function driveChoose(what){
+    var c = drive.choice; if(!c) return;
+    drive.err = ''; drive.connecting = true; updateBar();
+    var p;
+    if(what === 'cancel'){ drive.choice = null; if(c.type === 'connect') drive.on = false; p = Promise.resolve(); }
+    else if(what === 'remote') p = driveLoadRemote();
+    else p = driveKeepLocal();
+    return p.catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
+  }
+  function driveReconnect(){
+    if(!drive.on) return driveConnect();
+    drive.connecting = true; drive.err = ''; updateBar();
+    return driveToken(true).then(function(){ drive.needsLogin = false; return driveSave(); })
+      .catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
+  }
+  function driveDisconnect(){
+    clearTimeout(drive.timer);
+    drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = '';
+    drive.folderId = drive.backupsId = drive.fileId = drive.md5 = null; drive.token = null;
+    lsSet('is-takip-drive', null);
+    updateBar();
+  }
+  function driveSyncNow(){
+    if(driveDirty()) return driveSave();
+    return driveSync(true);
+  }
+  function driveSync(manual){
+    if(!drive.on || drive.busy || drive.connecting || drive.choice || !drive.fileId) return Promise.resolve();
+    if(!manual && (driveDirty() || editKey)) return Promise.resolve();
+    return driveToken(false).then(driveMeta).then(function(m){
+      if(!m.md5Checksum || !drive.md5 || String(m.md5Checksum) === String(drive.md5)) return;
+      if(driveDirty()) return;
+      return driveLoadRemote();
+    }).catch(function(e){
+      if(e && e.auth) drive.needsLogin = true;
+      else if(manual) drive.err = 'Eşitlenemedi: ' + errMsg(e);
+    }).then(updateBar);
+  }
+  function driveInit(){
+    if(!driveFlag() || !driveClientId()) return;
+    drive.connecting = true; updateBar();
+    driveToken(false).then(driveEnsure).then(function(){
+      if(dirty){ drive.choice = { type: 'connect', remoteOk: !!drive.fileId }; return; }   /* bağlanırken yerelde değişiklik yapıldı: sor */
+      if(!drive.fileId){ drive.on = true; return; }
+      return driveLoadRemote();
+    }).catch(function(e){
+      drive.on = false; drive.needsLogin = true;
+      if(!e.auth) drive.err = 'Drive bağlantısı kurulamadı: ' + errMsg(e);
+    }).then(function(){ drive.connecting = false; updateBar(); });
+  }
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') driveSync(false);
+  });
+
+  /* Kayıt çubuğundaki Drive bölümü */
+  function driveBarParts(){
+    var cls = 'status', msg, btns = [];
+    function B(t, fn, primary, dis){ var b = el('button', { class: (primary ? 'primary ' : '') + 'small', text: t, onclick: fn }); if(dis) b.disabled = true; btns.push(b); }
+    if(drive.err){ cls += ' err'; msg = '⚠ ' + drive.err; }
+    else if(drive.choice && drive.choice.type === 'connect'){
+      cls += ' warn'; msg = 'Drive\'da zaten kayıtlı veri var. Hangisi kullanılsın?';
+    } else if(drive.working){ cls += ' warn'; msg = '☁ ' + drive.working; }
+    else if(drive.connecting){ cls += ' warn'; msg = '☁ Google Drive\'a bağlanılıyor…'; }
+    else if(drive.needsLogin){ cls += ' warn'; msg = '☁ Drive bağlantısı için yeniden giriş gerekli.'; }
+    else if(drive.on && drive.busy){ cls += ' warn'; msg = '● Drive\'a yazılıyor…'; }
+    else if(drive.on && driveDirty()){ cls += ' warn'; msg = '● Değişiklikler birazdan Drive\'a yazılacak…'; }
+    else if(drive.on && drive.info){ cls += ' ok'; msg = drive.info; }
+    else if(drive.on){ cls += ' ok'; msg = '✓ Veriler Google Drive › ' + DRIVE_FOLDER + ' klasörüne otomatik kaydediliyor. Günlük yedekler Yedekler klasöründe.'; }
+    else { msg = 'Veriler henüz Google Drive\'a bağlı değil.'; }
+
+    if(drive.choice && drive.choice.type === 'connect'){
+      B('☁ Drive\'dakini yükle', function(){ driveChoose('remote'); }, true, !drive.choice.remoteOk);
+      B('⬆ Bu cihazdakini Drive\'a yaz', function(){ driveChoose('local'); }, true);
+      B('Vazgeç', function(){ driveChoose('cancel'); });
+    } else if(drive.needsLogin){
+      B('🔓 Drive\'a yeniden bağlan', driveReconnect, true);
+    } else if(drive.on && !drive.working){
+      B('💾 Drive\'a yedek al', driveBackupNow);
+      B('↻ Şimdi eşitle', driveSyncNow);
+      B('Bağlantıyı kes', driveDisconnect);
+    } else if(!drive.connecting){
+      B('☁ Google Drive\'a Bağlan', driveConnect, true);
+      B('⚙ Drive ayarı', function(){ drive.setup = !drive.setup; updateBar(); });
+    }
+    return { cls: cls, msg: msg, btns: btns };
+  }
+  function driveSetupBox(){
+    var inp = el('input', { type: 'text', autocomplete: 'off', placeholder: 'xxxxxxxx.apps.googleusercontent.com', 'aria-label': 'Google istemci kimliği' });
+    inp.value = driveClientId();
+    var box = el('form', { class: 'editform', style: 'flex:1 0 100%', onsubmit: function(e){
+      e.preventDefault(); lsSet('is-takip-gcid', inp.value.trim()); drive.setup = false; drive.err = ''; updateBar();
+    } }, [
+      el('span', { class: 'stats', style: 'flex:1 0 100%', text: 'Google Cloud\'da OAuth istemci kimliği (Web uygulaması) oluşturun ve "Yetkili JavaScript kaynakları" listesine şu adresi ekleyin: ' + location.origin }),
+      inp,
+      el('button', { type: 'submit', class: 'primary small', text: 'Kaydet' }),
+      el('button', { type: 'button', class: 'small', text: 'Kapat', onclick: function(){ drive.setup = false; updateBar(); } })
+    ]);
+    return box;
+  }
+  /* DRIVE:END */
+
+  /* ---------- UI Yardımcıları ---------- */
+  function el(tag, props, children){
+    var n = document.createElement(tag);
+    if(props){
+      Object.keys(props).forEach(function(k){
+        if(k === 'text') n.textContent = props[k];
+        else if(k === 'class') n.className = props[k];
+        else if(k.indexOf('on') === 0) n.addEventListener(k.slice(2), props[k]);
+        else n.setAttribute(k, props[k]);
+      });
+    }
+    (children || []).forEach(function(c){ if(c) n.appendChild(c); });
+    return n;
+  }
+
+  function updateBar(){
+    var bar = document.getElementById('savebar');
+    bar.innerHTML = '';
+    var driveMode = drive.on || drive.connecting || drive.needsLogin || !!drive.choice || !!drive.err || driveFlag();
+    var dp = driveBarParts();
+
+    if(driveMode){
+      bar.appendChild(el('span', { class: dp.cls, text: dp.msg }));
+      dp.btns.forEach(function(b){ bar.appendChild(b); });
+    } else {
+      var cls = 'status', msg;
+      if(saveError){ cls += ' err'; msg = '⚠ ' + saveError; }
+      else if(canWrite && !dirty){ cls += ' ok'; msg = '✓ Veriler ' + (jsonHandle && jsonHandle.name ? '"' + jsonHandle.name + '" dosyasına' : 'JSON dosyasına') + ' otomatik kaydediliyor.'; }
+      else if(canWrite && dirty){ cls += ' warn'; msg = '● JSON dosyasına yazılıyor…'; }
+      else if(dirty){ cls += ' warn'; msg = '● Kaydedilmemiş değişiklikler var.'; }
+      else if(needsPermission){ msg = 'Hatırlanan ' + (jsonHandle ? 'dosya: "' + (jsonHandle.name || 'JSON') + '"' : 'klasör: "' + (folderHandle && folderHandle.name || '') + '"') + ' — sayfada herhangi bir yere tıklayınca izin istenecek.'; }
+      else if(!hasFS){ msg = 'Otomatik kayıt için Google Drive\'a bağlanın (bu tarayıcı yerel dosyaya yazmayı desteklemiyor).'; }
+      else { msg = 'Otomatik kayıt için Google Drive\'a, varolan bir dosyaya ya da bir klasöre bağlanın.'; }
+
+      bar.appendChild(el('span', { class: cls, text: msg }));
+      dp.btns.forEach(function(b){ bar.appendChild(b); });
+
+      if(hasFS && !canWrite && !needsPermission){
+        bar.appendChild(el('button', { class:'small', text:'📄 Yeni JSON Oluştur', onclick: createNewJsonFile }));
+        bar.appendChild(el('button', { class:'small', text:'🔗 Varolan JSON\'a Bağlan', onclick: connectExistingJsonFile }));
+        bar.appendChild(el('button', { class:'small', text:'📁 Klasöre Bağlan (' + AUTO_NAME + ' otomatik)', title:'Bu HTML dosyasının bulunduğu klasörü seçin; içindeki ' + AUTO_NAME + ' her açılışta kendiliğinden bağlanır', onclick: connectFolder }));
+      }
+      if(needsPermission){
+        bar.appendChild(el('button', { class:'primary small', text:'🔓 Otomatik Kaydı Etkinleştir', onclick: enablePermission }));
+      }
+    }
+
+    bar.appendChild(el('button', { class:'small', text:'📥 JSON İçe Aktar (Yükle)', onclick: importJsonFile }));
+    bar.appendChild(el('button', { class:'small', text:'📤 JSON Dışa Aktar (Yedek)', onclick: downloadBackup }));
+    if(drive.setup && !drive.on) bar.appendChild(driveSetupBox());
+  }
+
+  window.addEventListener('beforeunload', function(e){
+    var unsaved = driveDirty() || (!drive.on && dirty) || (drive.on && canWrite && dirty);
+    if(unsaved){ e.preventDefault(); e.returnValue = ''; }
+  });
+
+  /* ---------- Veri Mantığı ---------- */
+  function findProject(pid){ return state.projects.find(function(p){ return p.id === pid; }); }
+  function findTask(pid, tid){
+    var p = findProject(pid);
+    return p && p.tasks.find(function(t){ return t.id === tid; });
+  }
+  function findItem(pid, tid, iid){
+    var t = findTask(pid, tid);
+    return t && t.items.find(function(i){ return i.id === iid; });
+  }
+  function commit(focusKey){ changed(); render(focusKey); }
+
+  /* Silme onayı: her silme işlemi bundan geçer */
+  function snip(x, n){ x = String(x == null ? '' : x).replace(/\s+/g, ' ').trim(); return x.length > n ? x.slice(0, n - 1) + '…' : x; }
+  function askDelete(msg){ return confirm(msg + '\n\nBu işlem geri alınamaz.'); }
+
+
+  /* ---------- Genel Arama ---------- */
+  var searchQ = '';
+  var FOLDMAP = { 'ı':'i','İ':'i','ç':'c','Ç':'c','ğ':'g','Ğ':'g','ö':'o','Ö':'o','ş':'s','Ş':'s','ü':'u','Ü':'u','â':'a','Â':'a','î':'i','û':'u' };
+  /* Büyük/küçük harf ve Türkçe karakterden bağımsız karşılaştırma (1:1 uzunluk korunur) */
+  function fold(x){
+    x = String(x == null ? '' : x); var o = '';
+    for(var i = 0; i < x.length; i++){
+      var c = x.charAt(i), m = FOLDMAP[c];
+      if(m){ o += m; continue; }
+      var l = c.toLowerCase(); o += (l.length === 1 ? l : c);
+    }
+    return o;
+  }
+  function searchWords(q){ return fold(q).split(/\s+/).filter(Boolean); }
+  function matches(words, text){
+    var f = fold(text);
+    return words.every(function(w){ return f.indexOf(w) >= 0; });
+  }
+  /* Eşleşen kısımları <mark> ile vurgula; uzun metni eşleşme çevresinde kısalt */
+  function hl(text, words, maxLen){
+    text = String(text == null ? '' : text);
+    var f = fold(text), first = -1;
+    words.forEach(function(w){ var i = f.indexOf(w); if(i >= 0 && (first < 0 || i < first)) first = i; });
+    var start = 0, end = text.length, pre = '', post = '';
+    if(maxLen && text.length > maxLen){
+      start = Math.max(0, (first < 0 ? 0 : first) - 40);
+      end = Math.min(text.length, start + maxLen);
+      if(start > 0) pre = '…';
+      if(end < text.length) post = '…';
+    }
+    var mask = new Array(end - start + 1).join('0').split('');
+    words.forEach(function(w){
+      var from = start;
+      while(true){
+        var i = f.indexOf(w, from);
+        if(i < 0 || i >= end) break;
+        for(var k = i; k < Math.min(end, i + w.length); k++) mask[k - start] = '1';
+        from = i + Math.max(1, w.length);
+      }
+    });
+    var frag = document.createDocumentFragment();
+    if(pre) frag.appendChild(document.createTextNode(pre));
+    var i2 = 0, seg = text.slice(start, end);
+    while(i2 < seg.length){
+      var on = mask[i2] === '1', j = i2;
+      while(j < seg.length && (mask[j] === '1') === on) j++;
+      var part = seg.slice(i2, j);
+      if(on) frag.appendChild(el('mark', { class:'hl', text: part }));
+      else frag.appendChild(document.createTextNode(part));
+      i2 = j;
+    }
+    if(post) frag.appendChild(document.createTextNode(post));
+    return frag;
+  }
+
+  function flashEl(node){
+    if(!node) return;
+    try { node.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e){ node.scrollIntoView(); }
+    node.classList.remove('flash'); void node.offsetWidth; node.classList.add('flash');
+    setTimeout(function(){ node.classList.remove('flash'); }, 2300);
+  }
+  function findBySid(id){
+    var all = document.querySelectorAll('[data-sid]');
+    for(var i = 0; i < all.length; i++) if(all[i].getAttribute('data-sid') === id) return all[i];
+    return null;
+  }
+  function goTask(sid, pid){
+    tab = 'tasks'; editKey = null; tasksFilter = '';
+    if(pid) remOpen[pid] = true;
+    render();
+    flashEl(findBySid(sid));
+  }
+  function goDay(key, weekly){
+    var d = keyToDate(key);
+    tab = 'cal'; editKey = null;
+    calYear = d.getFullYear(); calMonth = d.getMonth(); selDay = key; weekKey = mondayKey(d.getTime());
+    render();
+    if(weekly){ var n = findBySid(weekly); flashEl(n || document.querySelector('.weekly')); }
+    else flashEl(document.querySelector('.xbox') || document.querySelector('[data-day="' + key + '"]'));
+  }
+
+  function collectResults(words){
+    var G = { proje:[], is:[], madde:[], hat:[], hafta:[], izin:[] };
+    state.projects.forEach(function(p){
+      if(matches(words, p.title + ' ' + (p.note || ''))){
+        G.proje.push({ main:p.title, note:p.note, meta:p.tasks.length + ' iş', go:function(){ goTask(p.id); } });
+      }
+      remList(p).forEach(function(r){
+        if(matches(words, r.text)){
+          G.hat.push({ main:r.text, meta:p.title + (r.createdAt ? ' • ' + fmt(r.createdAt) : ''), go:function(){ goTask(r.id, p.id); } });
+        }
+      });
+      p.tasks.forEach(function(t){
+        if(matches(words, t.title + ' ' + (t.note || ''))){
+          G.is.push({ main:t.title, note:t.note, meta:p.title, go:function(){ goTask(t.id); } });
+        }
+        t.items.forEach(function(it){
+          if(matches(words, it.text + ' ' + (it.note || ''))){
+            G.madde.push({ main:it.text, note:it.note,
+              meta:p.title + ' › ' + t.title + ' • ' + (it.done ? 'Tamamlandı' + (it.doneAt ? ' ' + fmt(it.doneAt) : '') : 'Açık'),
+              go:function(){ goTask(it.id); } });
+          }
+        });
+      });
+    });
+    var wl = {}; WSTATUS.forEach(function(o){ wl[o[0]] = o[1]; });
+    Object.keys(state.weekly || {}).sort().reverse().forEach(function(wk){
+      (state.weekly[wk] || []).forEach(function(it){
+        if(matches(words, it.text + ' ' + (it.note || ''))){
+          G.hafta.push({ main:it.text, note:it.note, meta:fmtDay(wk) + ' haftası • ' + (wl[it.status || 'planned'] || ''), go:function(){ goDay(wk, it.id); } });
+        }
+      });
+    });
+    var L = leaveData();
+    Object.keys(L.notes).sort().reverse().forEach(function(k){
+      if(matches(words, L.notes[k] + ' ' + fmtDay(k))){
+        G.izin.push({ main:L.notes[k], meta:fmtDay(k) + (L.days[k] ? ' • ' + (LEAVE_TYPES[L.days[k]] || 'Fazla çalışma') : ''), go:function(){ goDay(k); } });
+      }
+    });
+    return [
+      ['📁 Projeler', G.proje], ['🗂 İşler', G.is], ['✅ Maddeler', G.madde],
+      ['📌 Hatırlatmalar', G.hat], ['🗓 Haftalık plan', G.hafta], ['★ İzin notları', G.izin]
+    ];
+  }
+
+  function renderSearch(){
+    var root = document.getElementById('searchView'); root.innerHTML = '';
+    var inp = document.getElementById('searchInput');
+    if(inp.value !== searchQ) inp.value = searchQ;
+    var words = searchWords(searchQ);
+    if(!words.length){
+      root.appendChild(el('div', { class:'empty', text:'Aramak için bir veya birkaç kelime yazın. Büyük/küçük harf ve Türkçe karakter (ı, ş, ğ…) fark etmez; birden fazla kelime yazarsanız hepsi geçen kayıtlar bulunur.' }));
+      return;
+    }
+    var groups = collectResults(words), total = 0, LIMIT = 50;
+    groups.forEach(function(g){
+      var rows = g[1]; if(!rows.length) return;
+      total += rows.length;
+      var ul = el('ul', { class:'sres' });
+      rows.slice(0, LIMIT).forEach(function(r){
+        var btn = el('button', { type:'button', class:'sitem', title:'Bulunduğu yere git', onclick:r.go }, [
+          el('span', { class:'smain' }, [ hl(r.main, words, 220) ]),
+          r.note ? el('span', { class:'snote' }, [ hl(r.note, words, 200) ]) : null,
+          r.meta ? el('span', { class:'smeta', text:r.meta }) : null
+        ]);
+        ul.appendChild(el('li', null, [ btn ]));
+      });
+      if(rows.length > LIMIT) ul.appendChild(el('li', { class:'empty', text:'… ve ' + (rows.length - LIMIT) + ' sonuç daha. Aramayı daraltın.' }));
+      root.appendChild(el('div', { class:'sgroup' }, [
+        el('h3', null, [ el('span', { text:g[0] }), el('span', { class:'count', text:String(rows.length) }) ]),
+        ul
+      ]));
+    });
+    if(!total) root.appendChild(el('div', { class:'empty', text:'"' + searchQ.trim() + '" için sonuç bulunamadı.' }));
+  }
+  function openSearch(){
+    tab = 'search'; editKey = null; render();
+    var i = document.getElementById('searchInput'); i.focus(); i.select();
+  }
+
+  /* ---------- Proje Hatırlatmaları (iş değil, sadece not/hatırlatma) ---------- */
+  var remOpen = {};
+  function remList(p){ if(!Array.isArray(p.reminders)) p.reminders = []; return p.reminders; }
+  function addReminder(pid, text){
+    text = text.trim(); var p = findProject(pid);
+    if(!text || !p) return;
+    remOpen[pid] = true;
+    remList(p).push({ id: uid(), text: text, createdAt: Date.now() });
+    commit('rem:' + pid);
+  }
+  function editReminder(pid, rid, v){
+    var p = findProject(pid); if(!p) return;
+    var r = remList(p).find(function(x){ return x.id === rid; });
+    if(r){ r.text = v; commit(); }
+  }
+  function deleteReminder(pid, rid){
+    var p = findProject(pid); if(!p) return;
+    var rr = remList(p).find(function(x){ return x.id === rid; });
+    if(!rr || !askDelete('Bu hatırlatma silinsin mi?\n"' + snip(rr.text, 80) + '"')) return;
+    p.reminders = remList(p).filter(function(x){ return x.id !== rid; });
+    commit();
+  }
+  /* Çok satırlı hatırlatma formu: Enter = alt satır, Ctrl+Enter = kaydet */
+  function remForm(text, btnText, isEdit, onSave, dataKey){
+    var attrs = { rows: isEdit ? '3' : '2', maxlength:'1500', autocomplete:'off',
+      placeholder: isEdit ? '' : 'Unutmamam gereken bir şey yaz… (Enter = alt satır)' };
+    if(isEdit) attrs['data-edit'] = '1'; else attrs['data-key'] = dataKey;
+    var ta = el('textarea', attrs);
+    ta.value = text || '';
+    function submit(){
+      var v = ta.value.replace(/\s+$/, '').replace(/^\s*\n/, '');
+      if(!v.trim()) return;
+      if(isEdit) editKey = null;
+      onSave(v);
+    }
+    ta.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && isEdit){ e.preventDefault(); cancelEdit(); }
+      else if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); submit(); }
+    });
+    var btns = [ el('button', { type:'submit', class: isEdit ? 'primary small' : '', text: btnText }) ];
+    if(isEdit) btns.push(el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }));
+    btns.push(el('span', { class:'hintx', text:'Enter: alt satır • Ctrl+Enter: ' + btnText.toLowerCase() }));
+    return el('form', { class:'remform', onsubmit:function(e){ e.preventDefault(); submit(); } }, [
+      ta, el('div', { class:'rbtns' }, btns)
+    ]);
+  }
+  function remindersBlock(p){
+    var list = remList(p);
+    var det = el('details', { class:'reminders' });
+    if(remOpen[p.id] || list.length || editKey && editKey.indexOf('r:') === 0) det.setAttribute('open', '');
+    det.addEventListener('toggle', function(){ remOpen[p.id] = det.open; });
+    det.appendChild(el('summary', null, [
+      el('span', { text:'📌 Hatırlatmalar' }),
+      el('span', { class:'count', text: String(list.length) })
+    ]));
+    if(list.length){
+      var ul = el('ul');
+      list.forEach(function(r){
+        if(editKey === 'r:' + r.id){
+          ul.appendChild(el('li', { 'data-sid': r.id }, [ remForm(r.text, 'Kaydet', true, function(v){ editReminder(p.id, r.id, v); }) ]));
+          return;
+        }
+        ul.appendChild(el('li', { 'data-sid': r.id }, [
+          el('span', { class:'txt rtxt', text: r.text }),
+          r.createdAt ? el('span', { class:'created-tag', title:'Eklenme Tarihi', text: fmt(r.createdAt) }) : null,
+          editBtn('r:' + r.id, 'Hatırlatmayı'),
+          delBtn('Hatırlatmayı', function(){ deleteReminder(p.id, r.id); })
+        ]));
+      });
+      det.appendChild(ul);
+    }
+    det.appendChild(remForm('', 'Ekle', false, function(v){ addReminder(p.id, v); }, 'rem:' + p.id));
+    return det;
+  }
+
+  function addProject(title){
+    title = title.trim(); if(!title) return;
+    tasksFilter = '';
+    state.projects.push({ id: uid(), title: title, tasks: [] });
+    commit('task:' + state.projects[state.projects.length - 1].id);
+  }
+  function deleteProject(pid){
+    var p = findProject(pid); if(!p) return;
+    var nt = p.tasks.length, ni = 0;
+    p.tasks.forEach(function(t){ ni += t.items.length; });
+    if(askDelete('"' + snip(p.title, 60) + '" projesi silinsin mi?\n' + nt + ' iş, ' + ni + ' madde, ' + remList(p).length + ' hatırlatma ve tüm notları da silinecek.')){
+      state.projects = state.projects.filter(function(x){ return x.id !== pid; });
+      commit();
+    }
+  }
+  function renameProject(pid, v){ var p = findProject(pid); if(p){ p.title = v; commit(); } }
+  function moveProject(pid, delta){
+    var i = state.projects.findIndex(function(x){ return x.id === pid; });
+    var j = i + delta;
+    if(i < 0 || j < 0 || j >= state.projects.length) return;
+    var p = state.projects.splice(i, 1)[0];
+    state.projects.splice(j, 0, p);
+    var dir = delta < 0 ? 'up' : 'down';
+    if(j === 0 && dir === 'up') dir = 'down';
+    else if(j === state.projects.length - 1 && dir === 'down') dir = 'up';
+    commit(dir + ':' + pid);
+  }
+
+  /* İŞ EKLEME - OLUSTURULMA TARIHI ILE */
+  function addTask(pid, title){
+    title = title.trim(); var p = findProject(pid);
+    if(!title || !p) return;
+    var t = { id: uid(), title: title, createdAt: Date.now(), items: [] };
+    p.tasks.push(t);
+    commit('item:' + t.id);
+  }
+  function deleteTask(pid, tid){
+    var p = findProject(pid), t = findTask(pid, tid); if(!t) return;
+    if(askDelete('"' + snip(t.title, 60) + '" işi silinsin mi?\n' + t.items.length + ' madde de silinecek.')){
+      p.tasks = p.tasks.filter(function(x){ return x.id !== tid; });
+      commit();
+    }
+  }
+  function renameTask(pid, tid, v){ var t = findTask(pid, tid); if(t){ t.title = v; commit(); } }
+  function completeTask(pid, tid){
+    var t = findTask(pid, tid); if(!t) return;
+    var now = Date.now();
+    t.items.forEach(function(i){ if(!i.done){ i.done = true; i.doneAt = now; } });
+    commit();
+  }
+
+  /* MADDE EKLEME - OLUSTURULMA TARIHI ILE */
+  function addItem(pid, tid, text){
+    text = text.trim(); var t = findTask(pid, tid);
+    if(!text || !t) return;
+    t.items.push({ id: uid(), text: text, done: false, createdAt: Date.now(), doneAt: null });
+    commit('item:' + tid);
+  }
+  function editItem(pid, tid, iid, v){ var i = findItem(pid, tid, iid); if(i){ i.text = v; commit(); } }
+  function setDone(pid, tid, iid, done){
+    var i = findItem(pid, tid, iid); if(!i) return;
+    i.done = done; i.doneAt = done ? Date.now() : null;
+    commit();
+  }
+  function deleteItem(pid, tid, iid){
+    var t = findTask(pid, tid); if(!t) return;
+    var di = t.items.find(function(x){ return x.id === iid; });
+    if(!di || !askDelete('Bu madde silinsin mi?\n"' + snip(di.text, 80) + '"')) return;
+    t.items = t.items.filter(function(x){ return x.id !== iid; });
+    commit();
+  }
+  function clearDone(){
+    var total = 0;
+    state.projects.forEach(function(p){ p.tasks.forEach(function(t){
+      total += t.items.filter(function(i){ return i.done; }).length;
+    }); });
+    if(!total) return;
+    if(askDelete('Tamamlanan ' + total + ' madde silinsin mi?')){
+      state.projects.forEach(function(p){ p.tasks.forEach(function(t){
+        t.items = t.items.filter(function(i){ return !i.done; });
+      }); });
+      commit();
+    }
+  }
+
+  function allDone(){
+    var out = [];
+    state.projects.forEach(function(p){ p.tasks.forEach(function(t){ t.items.forEach(function(it){
+      if(it.done) out.push({ p: p, t: t, it: it });
+    }); }); });
+    return out;
+  }
+
+  function dayKey(ts){
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function keyToDate(k){ var a = k.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]); }
+  function fmt(ts){
+    if(!ts) return '—';
+    return new Date(ts).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+  function fmtTime(ts){
+    if(!ts) return '';
+    return new Date(ts).toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
+  }
+  function fmtDay(k){
+    return keyToDate(k).toLocaleDateString('tr-TR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  }
+  function fmtMin(m){
+    var h = Math.floor(m / 60), r = m % 60;
+    if(h && r) return h + ' sa ' + r + ' dk';
+    if(h) return h + ' sa';
+    return r + ' dk';
+  }
+
+  function parseDuration(s){
+    s = (s || '').toLowerCase().replace(/,/g, '.').trim();
+    if(!s) return 'empty';
+    function fin(n){ return (n > 0 && n <= 60000) ? n : null; }
+    var m = s.match(/^(\d+):(\d{1,2})$/);
+    if(m){ if(+m[2] > 59) return null; return fin(+m[1] * 60 + +m[2]); }
+    if(/^\d+(\.\d+)?$/.test(s)) return fin(Math.round(parseFloat(s) * 60));
+    var re = /(\d+(?:\.\d+)?)\s*(saat|sa|s|h|hr|hrs|hours?|dakika|dk|d|m|min|mins|minutes?)(?![a-zçğıöşü])/g;
+    var total = 0, found = false, x;
+    while((x = re.exec(s)) !== null){
+      found = true;
+      var v = parseFloat(x[1]);
+      total += /^(saat|sa|s|h|hr|hrs|hour|hours)$/.test(x[2]) ? v * 60 : v;
+    }
+    if(!found) return null;
+    var rest = s.replace(re, '').replace(/çalışıldı|çalışma|harcandı|ve|[\s+,()]/g, '');
+    if(rest) return null;
+    return fin(Math.round(total));
+  }
+
+  function startEdit(key){ editKey = key; render(); }
+  function cancelEdit(){ editKey = null; render(); }
+  function escCancel(e){ if(e.key === 'Escape'){ e.preventDefault(); cancelEdit(); } }
+
+  function editForm(text, maxlen, onSave){
+    var inp = el('input', { type:'text', maxlength: String(maxlen), autocomplete:'off', 'data-edit':'1' });
+    inp.value = text;
+    inp.addEventListener('keydown', escCancel);
+    return el('form', { class:'editform', onsubmit:function(e){
+      e.preventDefault(); var v = inp.value.trim(); if(!v) return; editKey = null; onSave(v);
+    } }, [
+      inp, el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+      el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit })
+    ]);
+  }
+  function editBtn(key, what){
+    return el('button', { class:'icon', title: what + ' düzenle', 'aria-label': what + ' düzenle', text:'✎ Düzenle', onclick:function(){ startEdit(key); } });
+  }
+  function delBtn(what, fn){
+    return el('button', { class:'icon del', title: what + ' sil', 'aria-label': what + ' sil', text:'🗑', onclick: fn });
+  }
+
+  function noteBtn(obj){
+    return el('button', { class:'icon', title:'Not ekle / düzenle', 'aria-label':'Not ekle veya düzenle',
+      text: obj.note ? '📝 Not' : '📝 Not ekle', onclick:function(){ startEdit('n:' + obj.id); } });
+  }
+  function noteForm(obj){
+    var ta = el('textarea', { rows:'3', maxlength:'2000', placeholder:'Notunuzu yazın…', 'data-edit':'1' });
+    ta.value = obj.note || '';
+    function save(){
+      var v = ta.value.trim();
+      if(v) obj.note = v;
+      else if(obj.note){ if(!askDelete('Not silinsin mi?\n"' + snip(obj.note, 80) + '"')) return; delete obj.note; }
+      editKey = null; commit();
+    }
+    ta.addEventListener('keydown', function(e){
+      if(e.key === 'Escape'){ e.preventDefault(); cancelEdit(); }
+      else if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); save(); }
+    });
+    var actions = [
+      el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+      el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit })
+    ];
+    if(obj.note){
+      actions.push(el('button', { type:'button', class:'small', text:'Notu Sil', onclick:function(){
+        if(!askDelete('Not silinsin mi?\n"' + snip(obj.note, 80) + '"')) return;
+        delete obj.note; editKey = null; commit();
+      } }));
+    }
+    actions.push(el('span', { class:'hintx', text:'Ctrl+Enter ile kaydet' }));
+    return el('form', { class:'noteform', onsubmit:function(e){ e.preventDefault(); save(); } }, [
+      ta, el('div', { class:'noteactions' }, actions)
+    ]);
+  }
+  function noteBlock(obj){
+    if(editKey === 'n:' + obj.id) return noteForm(obj);
+    if(!obj.note) return null;
+    return el('div', { class:'note', text: obj.note });
+  }
+
+  function durBtn(it){
+    return el('button', { class: 'dur' + (it.minutes ? ' set' : ''), title:'Çalışma süresini gir / düzenle',
+      'aria-label':'Çalışma süresini gir veya düzenle',
+      text: it.minutes ? '⏱ ' + fmtMin(it.minutes) : '⏱ Süre gir', onclick:function(){ startEdit('m:' + it.id); } });
+  }
+  function durForm(it){
+    var inp = el('input', { type:'text', maxlength:'40', autocomplete:'off', placeholder:'örn. 4 saat, 90 dk, 1:30', 'data-edit':'1' });
+    inp.value = it.minutes ? fmtMin(it.minutes) : '';
+    inp.addEventListener('keydown', escCancel);
+    var err = el('span', { class:'err' });
+    return el('form', { class:'editform', onsubmit:function(e){
+      e.preventDefault();
+      var r = parseDuration(inp.value);
+      if(r === null){
+        err.textContent = 'Anlaşılamadı. Örnekler: 4 saat, 90 dk, 1 sa 30 dk, 1:30 (tek başına sayı saat sayılır).';
+        return;
+      }
+      editKey = null;
+      if(r === 'empty') delete it.minutes; else it.minutes = r;
+      commit();
+    } }, [
+      inp, el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+      el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }), err
+    ]);
+  }
+
+  function dateBtn(it, timeOnly){
+    return el('button', { class:'dur', title:'Tamamlanma tarih / saatini düzenle', 'aria-label':'Tarih ve saati düzenle',
+      text: '🕒 ' + (timeOnly ? fmtTime(it.doneAt) : fmt(it.doneAt)), onclick:function(){ startEdit('d:' + it.id); } });
+  }
+  function dateForm(it){
+    var inp = el('input', { type:'datetime-local', 'data-edit':'1' });
+    inp.value = localInputValue(it.doneAt || Date.now());
+    inp.addEventListener('keydown', escCancel);
+    var err = el('span', { class:'err' });
+    return el('form', { class:'editform', onsubmit:function(e){
+      e.preventDefault();
+      var ts = inp.value ? new Date(inp.value).getTime() : NaN;
+      if(isNaN(ts)){ err.textContent = 'Geçerli bir tarih ve saat girin.'; return; }
+      editKey = null; it.doneAt = ts; commit();
+    } }, [
+      inp, el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+      el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }), err
+    ]);
+  }
+
+  function addForm(placeholder, key, maxlen, onAdd, btnText){
+    var input = el('input', { type:'text', placeholder: placeholder, maxlength: String(maxlen), autocomplete:'off', 'data-key': key });
+    return el('form', { class:'add', onsubmit:function(e){ e.preventDefault(); onAdd(input.value); } }, [
+      input, el('button', { type:'submit', text: btnText || 'Ekle' })
+    ]);
+  }
+
+  function openRow(p, t, it){
+    if(editKey === 'i:' + it.id){
+      return el('li', null, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
+    }
+    return el('li', { 'data-sid': it.id }, [
+      el('span', { class:'txt', text: it.text }),
+      it.createdAt ? el('span', { class:'created-tag', title:'Eklenme Tarihi', text: fmt(it.createdAt) }) : null,
+      el('button', { class:'done-btn', text:'✓ Tamamlandı', onclick:function(){ setDone(p.id, t.id, it.id, true); } }),
+      noteBtn(it), editBtn('i:' + it.id, 'Maddeyi'),
+      delBtn('Maddeyi', function(){ deleteItem(p.id, t.id, it.id); }),
+      noteBlock(it)
+    ]);
+  }
+  function doneRow(p, t, it, timeOnly){
+    if(editKey === 'i:' + it.id){
+      return el('li', null, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
+    }
+    return el('li', { 'data-sid': it.id }, [
+      el('span', { class:'txt', text: it.text }),
+      dateBtn(it, timeOnly),
+      durBtn(it),
+      el('button', { class:'small', text:'↩ Geri Al', onclick:function(){ setDone(p.id, t.id, it.id, false); } }),
+      noteBtn(it), editBtn('i:' + it.id, 'Maddeyi'),
+      delBtn('Maddeyi', function(){ deleteItem(p.id, t.id, it.id); }),
+      editKey === 'm:' + it.id ? durForm(it) : null,
+      editKey === 'd:' + it.id ? dateForm(it) : null, noteBlock(it)
+    ]);
+  }
+
+  function renderTasks(){
+    var projEl = document.getElementById('projects');
+    var doneEl = document.getElementById('doneList');
+    projEl.innerHTML = ''; doneEl.innerHTML = '';
+
+    /* Proje filtresi (açılır menü) */
+    if(tasksFilter && !findProject(tasksFilter)) tasksFilter = '';
+    var bar = document.getElementById('taskFilterBar');
+    bar.innerHTML = '';
+    var fsel = el('select', { 'aria-label':'Proje filtresi', onchange:function(e){ tasksFilter = e.target.value; render(); } },
+      [ el('option', { value:'', text:'Tüm projeler' }) ].concat(state.projects.map(function(p){
+        return el('option', { value: p.id, text: p.title });
+      })));
+    fsel.value = tasksFilter;
+    bar.appendChild(el('span', { class:'stats', text:'Proje:' }));
+    bar.appendChild(fsel);
+    bar.hidden = !state.projects.length;
+
+    if(!state.projects.length){
+      projEl.appendChild(el('div', { class:'empty', text:'Henüz proje yok. Yukarıdan bir proje ekleyerek başlayın.' }));
+    }
+
+    state.projects.forEach(function(p, pi){
+      if(tasksFilter && p.id !== tasksFilter) return;
+      var pOpen = 0, pDone = 0;
+      var taskNodes = [];
+      var doneTaskNodes = [];
+
+      p.tasks.forEach(function(t){
+        var open = t.items.filter(function(i){ return !i.done; });
+        var done = t.items.filter(function(i){ return i.done; });
+        pOpen += open.length; pDone += done.length;
+
+        var thead;
+        if(editKey === 't:' + t.id){
+          thead = el('div', { class:'thead' }, [ editForm(t.title, 100, function(v){ renameTask(p.id, t.id, v); }) ]);
+        } else {
+          var completeBtn = el('button', { class:'done-btn', text:'✓ İşi Tamamla', title:'Bu işin tüm açık maddelerini tamamla',
+            onclick:function(){ completeTask(p.id, t.id); } });
+          if(!open.length) completeBtn.disabled = true;
+          thead = el('div', { class:'thead' }, [
+            el('h4', { text: t.title }),
+            t.createdAt ? el('span', { class:'created-tag', title:'İş Oluşturulma Tarihi', text: fmt(t.createdAt) }) : null,
+            el('span', { class:'count', text: open.length + ' açık' }),
+            completeBtn, noteBtn(t), editBtn('t:' + t.id, 'İşi'),
+            delBtn('İşi', function(){ deleteTask(p.id, t.id); })
+          ]);
+        }
+
+        var ul = el('ul');
+        open.forEach(function(it){ ul.appendChild(openRow(p, t, it)); });
+
+        taskNodes.push(el('div', { class:'task', 'data-sid': t.id }, [
+          thead, noteBlock(t),
+          open.length ? ul : el('div', { class:'empty', text: t.items.length ? 'Tüm maddeler tamamlandı.' : 'Henüz iş maddesi yok.' }),
+          addForm('Yeni iş maddesi ekle…', 'item:' + t.id, 200, function(v){ addItem(p.id, t.id, v); })
+        ]));
+
+        if(done.length){
+          var dul = el('ul');
+          done.slice().sort(function(a, b){ return (b.doneAt || 0) - (a.doneAt || 0); }).forEach(function(it){
+            dul.appendChild(doneRow(p, t, it, false));
+          });
+          doneTaskNodes.push(el('div', { class:'task' }, [
+            el('div', { class:'thead' }, [
+              el('h4', { text: t.title }),
+              el('span', { class:'count', text: done.length + ' tamamlandı' })
+            ]),
+            dul
+          ]));
+        }
+      });
+
+      var phead;
+      if(editKey === 'p:' + p.id){
+        phead = el('div', { class:'phead' }, [ editForm(p.title, 80, function(v){ renameProject(p.id, v); }) ]);
+      } else {
+        var upBtn = el('button', { class:'icon', title:'Projeyi yukarı al', text:'▲', 'data-key':'up:' + p.id, onclick:function(){ moveProject(p.id, -1); } });
+        var downBtn = el('button', { class:'icon', title:'Projeyi aşağı al', text:'▼', 'data-key':'down:' + p.id, onclick:function(){ moveProject(p.id, 1); } });
+        if(pi === 0) upBtn.disabled = true;
+        if(pi === state.projects.length - 1) downBtn.disabled = true;
+        phead = el('div', { class:'phead' }, [
+          el('h3', { text: p.title }),
+          el('span', { class:'count', text: p.tasks.length + ' iş • ' + pOpen + ' açık madde' }),
+          upBtn, downBtn, noteBtn(p), editBtn('p:' + p.id, 'Projeyi'),
+          delBtn('Projeyi', function(){ deleteProject(p.id); })
+        ]);
+      }
+      var projNodes = [ phead, noteBlock(p), remindersBlock(p) ];
+      if(!p.tasks.length) projNodes.push(el('div', { class:'empty', text:'Bu projede henüz iş yok.' }));
+      taskNodes.forEach(function(n){ projNodes.push(n); });
+      var tf = addForm('Bu projeye yeni iş ekle…', 'task:' + p.id, 100, function(v){ addTask(p.id, v); }, 'İş Ekle');
+      tf.className += ' addtask';
+      projNodes.push(tf);
+      projEl.appendChild(el('div', { class:'project', 'data-sid': p.id }, projNodes));
+
+      if(doneTaskNodes.length){
+        var dn = [ el('div', { class:'phead' }, [
+          el('h3', { text: p.title }),
+          el('span', { class:'count', text: pDone + ' tamamlandı' })
+        ]) ];
+        doneTaskNodes.forEach(function(n){ dn.push(n); });
+        doneEl.appendChild(el('div', { class:'project done-card' }, dn));
+      }
+    });
+
+    if(!doneEl.children.length){
+      doneEl.appendChild(el('div', { class:'empty', text:'Tamamlanan iş yok.' }));
+    }
+  }
+
+  /* ---------- Haftalık Plan ---------- */
+  var WSTATUS = [ ['planned','Bekliyor'], ['done','Tamamlandı'], ['postponed','Ertelendi'], ['failed','Yapılamadı'], ['cancelled','İptal oldu'] ];
+
+  function mondayKey(ts){
+    var d = new Date(ts);
+    d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+    return dayKey(d.getTime());
+  }
+  function shiftKey(key, days){
+    var d = keyToDate(key); d.setDate(d.getDate() + days);
+    return dayKey(d.getTime());
+  }
+  function weekList(key, create){
+    if(!state.weekly) state.weekly = {};
+    if(!state.weekly[key] && create) state.weekly[key] = [];
+    return state.weekly[key] || [];
+  }
+  function addWeekItem(text){
+    text = text.trim(); if(!text) return;
+    weekList(weekKey, true).push({ id: uid(), text: text, status: 'planned', createdAt: Date.now() });
+    commit('week');
+  }
+  function setWeekEdit(id, v){
+    var it = weekList(weekKey).find(function(x){ return x.id === id; });
+    if(it){ it.text = v; commit(); }
+  }
+  function deleteWeekItem(id){
+    var wi = weekList(weekKey).find(function(x){ return x.id === id; });
+    if(!wi || !askDelete('Haftalık plandan bu iş silinsin mi?\n"' + snip(wi.text, 80) + '"')) return;
+    state.weekly[weekKey] = weekList(weekKey).filter(function(x){ return x.id !== id; });
+    commit();
+  }
+  function moveWeekItemNext(id){
+    var cur = weekList(weekKey);
+    var it = cur.find(function(x){ return x.id === id; });
+    if(!it) return;
+    state.weekly[weekKey] = cur.filter(function(x){ return x.id !== id; });
+    it.status = 'planned';
+    weekList(shiftKey(weekKey, 7), true).push(it);
+    commit();
+  }
+
+  function renderWeekly(){
+    var items = weekList(weekKey);
+    var s = keyToDate(weekKey), e = keyToDate(shiftKey(weekKey, 6));
+    var title = s.toLocaleDateString('tr-TR', { day:'numeric', month:'long' }) + ' – ' +
+                e.toLocaleDateString('tr-TR', { day:'numeric', month:'long', year:'numeric' });
+    var doneCount = items.filter(function(x){ return x.status === 'done'; }).length;
+    var isThis = weekKey === mondayKey(Date.now());
+
+    var head = el('div', { class:'calhead' }, [
+      el('button', { class:'small', text:'‹', title:'Önceki hafta', onclick:function(){ weekKey = shiftKey(weekKey, -7); editKey = null; render(); } }),
+      el('h3', { text: title + (isThis ? ' (bu hafta)' : '') }),
+      el('button', { class:'small', text:'Bu hafta', onclick:function(){ weekKey = mondayKey(Date.now()); editKey = null; render(); } }),
+      el('button', { class:'small', text:'›', title:'Sonraki hafta', onclick:function(){ weekKey = shiftKey(weekKey, 7); editKey = null; render(); } })
+    ]);
+
+    var nodes = [ el('h2', { text:'Haftalık plan' }), head,
+      el('div', { class:'daysum', text: items.length ? doneCount + ' / ' + items.length + ' iş tamamlandı' : 'Bu hafta için henüz iş girilmedi.' }) ];
+
+    if(items.length){
+      var ul = el('ul');
+      items.forEach(function(it){
+        var st = it.status || 'planned';
+        if(editKey === 'w:' + it.id){
+          ul.appendChild(el('li', null, [ editForm(it.text, 200, function(v){ setWeekEdit(it.id, v); }) ]));
+          return;
+        }
+        var sel = el('select', { class:'wsel st-' + st, 'aria-label':'Durum', onchange:function(ev){ it.status = ev.target.value; commit(); } },
+          WSTATUS.map(function(o){ return el('option', { value:o[0], text:o[1] }); }));
+        sel.value = st;
+        ul.appendChild(el('li', { 'data-sid': it.id }, [
+          el('span', { class:'txt wtxt st-' + st, text: it.text }),
+          sel,
+          st === 'postponed' ? el('button', { class:'small', text:'→ Gelecek haftaya taşı', onclick:function(){ moveWeekItemNext(it.id); } }) : null,
+          noteBtn(it), editBtn('w:' + it.id, 'İşi'),
+          delBtn('İşi', function(){ deleteWeekItem(it.id); }),
+          noteBlock(it)
+        ]));
+      });
+      nodes.push(ul);
+    }
+    nodes.push(addForm('Bu hafta yapılması gereken işi ekle…', 'week', 200, addWeekItem));
+    return el('div', { class:'panel weekly' }, nodes);
+  }
+
+  /* ---------- Fazla Çalışma Günleri / Kazanılan İzin ---------- */
+  var LEAVE_TYPES = { weekend:'Hafta sonu çalışması', holiday:'Resmi tatil çalışması' };
+  function round2(n){ return Math.round(n * 100) / 100; }
+  function fmtDays(n){ return String(round2(n)).replace('.', ',') + ' gün'; }
+  function leaveData(){
+    if(!state.leave || typeof state.leave !== 'object') state.leave = { days: {}, adjust: 0 };
+    if(!state.leave.days || typeof state.leave.days !== 'object') state.leave.days = {};
+    if(!state.leave.notes || typeof state.leave.notes !== 'object') state.leave.notes = {};
+    if(!isFinite(+state.leave.adjust)) state.leave.adjust = 0;
+    return state.leave;
+  }
+  function leaveTotal(){
+    var L = leaveData();
+    return round2(Object.keys(L.days).length + (+L.adjust));
+  }
+
+  function leaveNoteInput(key){
+    var inp = el('input', { type:'text', maxlength:'300', autocomplete:'off', placeholder:'Not ekle…', 'aria-label':'İzin notu' });
+    inp.value = leaveData().notes[key] || '';
+    inp.addEventListener('change', function(){
+      var L = leaveData(), v = inp.value.trim();
+      if(v) L.notes[key] = v; else delete L.notes[key];
+      changed();
+    });
+    return inp;
+  }
+  function removeLeaveDay(key){
+    var L = leaveData();
+    if(!askDelete(fmtDay(key) + ' günündeki fazla çalışma işareti kaldırılsın mı?\n(Kazanılan izinden 1 gün düşer' + (L.notes[key] ? ', notu da silinir' : '') + '.)')) return;
+    delete L.days[key]; delete L.notes[key];
+    commit();
+  }
+
+  function dayLeaveBox(key){
+    var L = leaveData(), cur = L.days[key], kids;
+    if(cur){
+      kids = [
+        el('span', { text:'★ ' + (LEAVE_TYPES[cur] || 'Fazla çalışma günü') + ' — +1 gün izin' }),
+        leaveNoteInput(key),
+        el('button', { class:'small', text:'İşareti kaldır', onclick:function(){ removeLeaveDay(key); } })
+      ];
+    } else {
+      var dow = keyToDate(key).getDay();
+      var sel = el('select', { 'aria-label':'Gün türü' }, [
+        el('option', { value:'weekend', text: LEAVE_TYPES.weekend }),
+        el('option', { value:'holiday', text: LEAVE_TYPES.holiday })
+      ]);
+      sel.value = (dow === 0 || dow === 6) ? 'weekend' : 'holiday';
+      kids = [
+        el('span', { text:'Fazla çalışma günü mü?' }), sel,
+        el('button', { class:'small primary', text:'İşaretle (+1 gün izin)', onclick:function(){ L.days[key] = sel.value; commit(); } })
+      ];
+    }
+    return el('div', { class:'xbox' }, kids);
+  }
+
+  function renderLeave(){
+    var L = leaveData();
+    var keys = Object.keys(L.days).sort().reverse();
+    var nH = 0, nW = 0;
+    keys.forEach(function(k){ if(L.days[k] === 'holiday') nH++; else nW++; });
+    var marked = keys.length, adj = round2(+L.adjust), total = round2(marked + adj);
+    var nodes = [ el('h2', { text:'🏖 Kazanılan izin' }) ];
+
+    if(editKey === 'leave'){
+      var inp = el('input', { type:'text', inputmode:'decimal', maxlength:'8', autocomplete:'off', 'data-edit':'1', 'aria-label':'Kazanılan izin (gün)' });
+      inp.value = String(total).replace('.', ',');
+      inp.addEventListener('keydown', escCancel);
+      var err = el('span', { class:'err' });
+      nodes.push(el('form', { class:'editform', onsubmit:function(e){
+        e.preventDefault();
+        var v = parseFloat(String(inp.value).replace(',', '.'));
+        if(!isFinite(v)){ err.textContent = 'Geçerli bir sayı girin (örn. 3 veya 2,5).'; return; }
+        L.adjust = round2(v - marked);
+        editKey = null; commit();
+      } }, [
+        inp, el('span', { class:'stats', text:'gün' }),
+        el('button', { type:'submit', class:'primary small', text:'Kaydet' }),
+        el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }), err
+      ]));
+    } else {
+      nodes.push(el('div', { class:'leavetop' }, [
+        el('span', { class:'leaveval', text: fmtDays(total) }),
+        el('button', { class:'icon', text:'✎ Düzenle', title:'Kazanılan izin toplamını düzenle', onclick:function(){ startEdit('leave'); } })
+      ]));
+    }
+
+    nodes.push(el('div', { class:'daysum', text:
+      LEAVE_TYPES.weekend + ': ' + nW + ' • ' + LEAVE_TYPES.holiday + ': ' + nH +
+      ' • Düzeltme / kullanılan: ' + (adj > 0 ? '+' : '') + String(adj).replace('.', ',') }));
+
+    var uinp = el('input', { type:'text', inputmode:'decimal', maxlength:'6', autocomplete:'off', 'aria-label':'Kullanılan izin (gün)' });
+    uinp.value = '1';
+    var uerr = el('span', { class:'err' });
+    nodes.push(el('form', { class:'add leaveuse', onsubmit:function(e){
+      e.preventDefault();
+      var n = parseFloat(String(uinp.value).replace(',', '.'));
+      if(!isFinite(n) || n <= 0){ uerr.textContent = 'Düşülecek gün sayısını girin (örn. 1 veya 0,5).'; return; }
+      L.adjust = round2((+L.adjust) - n); commit();
+    } }, [
+      el('span', { class:'stats', text:'İzin kullandım:' }), uinp, el('span', { class:'stats', text:'gün' }),
+      el('button', { type:'submit', text:'− Düş' }), uerr
+    ]));
+
+    if(keys.length){
+      var ul = el('ul', { style:'margin-top:10px' });
+      keys.slice(0, 12).forEach(function(k){
+        ul.appendChild(el('li', { class:'lrow' }, [
+          el('span', { class:'dt', text: fmtDay(k) }),
+          leaveNoteInput(k),
+          el('span', { class:'tag', text: LEAVE_TYPES[L.days[k]] || 'Fazla çalışma' }),
+          delBtn('İşareti', function(){ removeLeaveDay(k); })
+        ]));
+      });
+      nodes.push(ul);
+      if(keys.length > 12) nodes.push(el('div', { class:'empty', text:'… ve ' + (keys.length - 12) + ' gün daha (takvimden günü seçerek kaldırabilirsiniz).' }));
+    } else {
+      nodes.push(el('div', { class:'empty', text:'Henüz işaretlenmiş fazla çalışma günü yok. Takvimde bir gün seçip işaretleyin.' }));
+    }
+    return el('div', { class:'panel weekly' }, nodes);
+  }
+
+  function renderCalendar(){
+    var root = document.getElementById('calView'); root.innerHTML = '';
+    var byDay = {};
+    allDone().forEach(function(x){
+      if(!x.it.doneAt) return;
+      var k = dayKey(x.it.doneAt);
+      (byDay[k] = byDay[k] || []).push(x);
+    });
+
+    var todayKey = dayKey(Date.now());
+    var startOffset = (new Date(calYear, calMonth, 1).getDay() + 6) % 7;
+    var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+    function nav(delta){
+      calMonth += delta;
+      if(calMonth < 0){ calMonth = 11; calYear--; }
+      if(calMonth > 11){ calMonth = 0; calYear++; }
+      render();
+    }
+
+    var head = el('div', { class:'calhead' }, [
+      el('button', { class:'small', text:'‹', onclick:function(){ nav(-1); } }),
+      el('h3', { text: MONTHS[calMonth] + ' ' + calYear }),
+      el('button', { class:'small', text:'Bugün', onclick:function(){
+        var n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth(); selDay = dayKey(n.getTime()); weekKey = mondayKey(n.getTime()); render();
+      } }),
+      el('button', { class:'small', text:'›', onclick:function(){ nav(1); } })
+    ]);
+
+    var grid = el('div', { class:'calgrid' });
+    DOW.forEach(function(d){ grid.appendChild(el('div', { class:'dow', text: d })); });
+    for(var i = 0; i < startOffset; i++) grid.appendChild(el('div', { class:'blank' }));
+    for(var d = 1; d <= daysInMonth; d++){
+      (function(day){
+        var key = calYear + '-' + pad(calMonth + 1) + '-' + pad(day);
+        var list = byDay[key] || [];
+        var cls = 'day' + (key === todayKey ? ' today' : '') + (key === selDay ? ' sel' : '');
+        grid.appendChild(el('button', { type:'button', class: cls, 'data-day': key, onclick:function(){ selDay = key; weekKey = mondayKey(keyToDate(key).getTime()); render(); } }, [
+          el('span', { class:'num', text: String(day) }),
+          list.length ? el('span', { class:'badge', text: '✓ ' + list.length }) : null,
+          leaveData().days[key] ? el('span', { class:'xmark', title: LEAVE_TYPES[leaveData().days[key]] || 'Fazla çalışma günü', text:'★ +1' }) : null
+        ]));
+      })(d);
+    }
+
+    var list = (byDay[selDay] || []).slice().sort(function(a, b){ return a.it.doneAt - b.it.doneAt; });
+    var mins = 0;
+    list.forEach(function(x){ if(x.it.minutes) mins += x.it.minutes; });
+    var panel = [
+      el('h3', { class:'daytitle', text: fmtDay(selDay) }),
+      el('div', { class:'daysum', text: list.length ? list.length + ' madde tamamlandı' + (mins ? ' • toplam çalışma: ' + fmtMin(mins) : '') : 'Bu gün kapatılan iş yok.' })
+    ];
+    panel.push(dayLeaveBox(selDay));
+    var groups = [], idx = {};
+    list.forEach(function(x){
+      var k = x.p.id + '|' + x.t.id;
+      if(!(k in idx)){ idx[k] = groups.length; groups.push({ p: x.p, t: x.t, rows: [] }); }
+      groups[idx[k]].rows.push(x);
+    });
+    groups.forEach(function(g){
+      var ul = el('ul');
+      g.rows.forEach(function(x){ ul.appendChild(doneRow(g.p, g.t, x.it, true)); });
+      panel.push(el('div', { class:'task done-card' }, [
+        el('div', { class:'thead' }, [ el('h4', { text: g.p.title + ' › ' + g.t.title }) ]),
+        ul
+      ]));
+    });
+
+    root.appendChild(el('div', { class:'calwrap' }, [
+      el('div', null, [ head, grid ]), el('div', null, panel)
+    ]));
+    root.appendChild(renderLeave());
+    root.appendChild(renderWeekly());
+  }
+
+  /* ---------- Dashboard: Manuel Yapılan İş Girişi ---------- */
+  var manual = { pid: '', tid: '__new__', msg: '', ok: true };
+  function localInputValue(ts){
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function manualForm(){
+    if(manual.pid && !findProject(manual.pid)) manual.pid = '';
+    if(!manual.pid && state.projects.length) manual.pid = state.projects[0].id;
+
+    var box = el('form', { class:'manual', novalidate:'novalidate' });
+    box.appendChild(el('h2', { text:'➕ Manuel yapılan iş ekle' }));
+
+    if(!state.projects.length){
+      box.appendChild(el('div', { class:'empty', text:'Önce "İşler" sekmesinden bir proje ekleyin.' }));
+      return box;
+    }
+
+    function field(label, node, wide){
+      return el('div', { class:'mfield' + (wide ? ' wide' : '') }, [ el('label', { text: label }), node ]);
+    }
+
+    var selP = el('select', { 'aria-label':'Proje' }, state.projects.map(function(p){
+      return el('option', { value: p.id, text: p.title });
+    }));
+    selP.value = manual.pid;
+
+    var selT = el('select', { 'aria-label':'İş' });
+    var newTask = el('input', { type:'text', maxlength:'100', autocomplete:'off', placeholder:'Yeni iş adı (örn. Tasarım)' });
+    var newTaskField = field('Yeni iş adı', newTask);
+
+    function fillTasks(){
+      var p = findProject(selP.value);
+      selT.innerHTML = '';
+      selT.appendChild(el('option', { value:'__new__', text:'➕ Yeni iş oluştur…' }));
+      (p ? p.tasks : []).forEach(function(t){ selT.appendChild(el('option', { value: t.id, text: t.title })); });
+      var ok = p && manual.tid !== '__new__' && p.tasks.some(function(t){ return t.id === manual.tid; });
+      if(!ok) manual.tid = (p && p.tasks.length) ? p.tasks[0].id : '__new__';
+      selT.value = manual.tid;
+      newTaskField.hidden = (manual.tid !== '__new__');
+    }
+    selP.addEventListener('change', function(){ manual.pid = selP.value; manual.tid = ''; fillTasks(); });
+    selT.addEventListener('change', function(){ manual.tid = selT.value; newTaskField.hidden = (manual.tid !== '__new__'); });
+    fillTasks();
+
+    var text = el('input', { type:'text', maxlength:'200', autocomplete:'off', placeholder:'Yapılan işi yazın…' });
+    var when = el('input', { type:'datetime-local' });
+    when.value = localInputValue(Date.now());
+    var dur = el('input', { type:'text', maxlength:'40', autocomplete:'off', placeholder:'örn. 2 saat, 90 dk, 1:30 (isteğe bağlı)' });
+    var note = el('textarea', { rows:'2', maxlength:'2000', placeholder:'İsteğe bağlı not…' });
+    var msg = el('span', { class:'mmsg' + (manual.msg ? (manual.ok ? ' ok' : ' err') : ''), text: manual.msg });
+
+    box.appendChild(el('div', { class:'mgrid' }, [
+      field('Proje', selP), field('İş', selT), newTaskField,
+      field('Yapılan iş', text, true),
+      field('Tamamlanma tarihi / saati', when), field('Çalışma süresi', dur),
+      field('Not', note, true)
+    ]));
+    box.appendChild(el('div', { class:'mactions' }, [
+      el('button', { type:'submit', class:'primary', text:'Kaydet' }), msg
+    ]));
+
+    box.addEventListener('submit', function(e){
+      e.preventDefault();
+      function fail(m){ msg.className = 'mmsg err'; msg.textContent = m; manual.msg = m; manual.ok = false; }
+      var p = findProject(selP.value);
+      if(!p) return fail('Proje seçin.');
+      var v = text.value.trim();
+      if(!v) return fail('Yapılan işi yazın.');
+      var ts = when.value ? new Date(when.value).getTime() : Date.now();
+      if(isNaN(ts)) return fail('Geçerli bir tarih girin.');
+      var mins = parseDuration(dur.value);
+      if(mins === null) return fail('Süre anlaşılamadı. Örnekler: 4 saat, 90 dk, 1 sa 30 dk, 1:30.');
+      var t;
+      if(manual.tid === '__new__'){
+        var tn = newTask.value.trim();
+        if(!tn) return fail('Yeni iş için bir ad yazın.');
+        t = { id: uid(), title: tn, createdAt: ts, items: [] };
+        p.tasks.push(t);
+        manual.tid = t.id;
+      } else {
+        t = findTask(p.id, manual.tid);
+        if(!t) return fail('İş seçin.');
+      }
+      var it = { id: uid(), text: v, done: true, createdAt: ts, doneAt: ts };
+      if(mins !== 'empty') it.minutes = mins;
+      var nt = note.value.trim(); if(nt) it.note = nt;
+      t.items.push(it);
+      manual.pid = p.id; manual.msg = '✓ Eklendi: ' + v; manual.ok = true;
+      commit();
+    });
+    return box;
+  }
+
+  function renderDashboard(){
+    var root = document.getElementById('dashView'); root.innerHTML = '';
+    var done = allDone();
+    if(dashFilter && !findProject(dashFilter)) dashFilter = '';
+    /* Tarih aralığı filtresi (isteğe bağlı): başlangıç / bitiş günleri dahil, biri boş bırakılabilir */
+    var rFrom = dashRange.on && dashRange.from ? keyToDate(dashRange.from).getTime() : null;
+    var rTo = dashRange.on && dashRange.to ? keyToDate(dashRange.to).getTime() + 86400000 - 1 : null;
+    var swapped = false;
+    if(rFrom !== null && rTo !== null && rFrom > rTo){
+      swapped = true;
+      var tmpF = keyToDate(dashRange.to).getTime(), tmpT = keyToDate(dashRange.from).getTime() + 86400000 - 1;
+      rFrom = tmpF; rTo = tmpT;
+    }
+    var rangeActive = rFrom !== null || rTo !== null;
+    var inRange = done.filter(function(x){
+      if(!rangeActive) return true;
+      var ts = x.it.doneAt; if(!ts) return false;
+      return (rFrom === null || ts >= rFrom) && (rTo === null || ts <= rTo);
+    });
+    var rows = inRange.filter(function(x){ return !dashFilter || x.p.id === dashFilter; });
+
+    var todayKey = dayKey(Date.now());
+    var d7 = new Date(); d7.setHours(0, 0, 0, 0); d7.setDate(d7.getDate() - 6);
+    var cToday = 0, c7 = 0, mins = 0, noDur = 0;
+    rows.forEach(function(x){
+      var ts = x.it.doneAt;
+      if(ts){
+        if(dayKey(ts) === todayKey) cToday++;
+        if(ts >= d7.getTime()) c7++;
+      }
+      if(x.it.minutes) mins += x.it.minutes; else noDur++;
+    });
+
+    var wkMinsMap = {}, dayMinsMap = {};
+    rows.forEach(function(x){
+      var ts = x.it.doneAt; if(!ts || !x.it.minutes) return;
+      var wk0 = mondayKey(ts); wkMinsMap[wk0] = (wkMinsMap[wk0] || 0) + x.it.minutes;
+      var dk0 = dayKey(ts); dayMinsMap[dk0] = (dayMinsMap[dk0] || 0) + x.it.minutes;
+    });
+    var wkMins = wkMinsMap[mondayKey(Date.now())] || 0;
+
+    var sel = el('select', { 'aria-label':'Proje filtresi', onchange:function(e){ dashFilter = e.target.value; render(); } },
+      [ el('option', { value:'', text:'Tüm projeler' }) ].concat(state.projects.map(function(p){
+        return el('option', { value: p.id, text: p.title });
+      })));
+    sel.value = dashFilter;
+    root.appendChild(el('div', { class:'dashbar' }, [ el('span', { class:'stats', text:'Proje:' }), sel ]));
+
+    /* Tarih aralığı çubuğu */
+    var rOn = el('input', { type:'checkbox', id:'rangeOn', 'aria-label':'Tarih aralığı filtresini etkinleştir' });
+    rOn.checked = dashRange.on;
+    rOn.addEventListener('change', function(){ dashRange.on = rOn.checked; render(); });
+    var fromI = el('input', { type:'date', 'aria-label':'Başlangıç tarihi' });
+    var toI = el('input', { type:'date', 'aria-label':'Bitiş tarihi' });
+    fromI.value = dashRange.from; toI.value = dashRange.to;
+    fromI.disabled = toI.disabled = !dashRange.on;
+    fromI.addEventListener('change', function(){ dashRange.from = fromI.value; render(); });
+    toI.addEventListener('change', function(){ dashRange.to = toI.value; render(); });
+    function quick(label, fn){
+      var b = el('button', { type:'button', class:'small', text: label, onclick:function(){
+        var r = fn(); dashRange.on = true; dashRange.from = r[0]; dashRange.to = r[1]; render();
+      } });
+      b.disabled = !dashRange.on;
+      return b;
+    }
+    var rangeBar = el('div', { class:'dashbar' }, [
+      el('label', { class:'stats', for:'rangeOn', style:'display:flex;align-items:center;gap:6px;cursor:pointer' }, [ rOn, el('span', { text:'Tarih aralığı:' }) ]),
+      fromI, el('span', { class:'stats', text:'–' }), toI,
+      quick('Bu hafta', function(){ var k = mondayKey(Date.now()); return [ k, shiftKey(k, 6) ]; }),
+      quick('Bu ay', function(){ var n = new Date(); return [ dayKey(new Date(n.getFullYear(), n.getMonth(), 1).getTime()), dayKey(new Date(n.getFullYear(), n.getMonth() + 1, 0).getTime()) ]; }),
+      quick('Son 30 gün', function(){ var n = new Date(); return [ dayKey(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 29).getTime()), dayKey(n.getTime()) ]; }),
+      el('button', { type:'button', class:'small', text:'Temizle', disabled: (!dashRange.from && !dashRange.to) ? 'disabled' : null,
+        onclick:function(){ dashRange.from = ''; dashRange.to = ''; render(); } })
+    ]);
+    if(!(!dashRange.from && !dashRange.to)) rangeBar.lastChild.removeAttribute('disabled'); else rangeBar.lastChild.setAttribute('disabled', 'disabled');
+    root.appendChild(rangeBar);
+    if(dashRange.on && !rangeActive){
+      root.appendChild(el('div', { class:'empty', text:'Filtre açık ama tarih seçilmedi; tüm tarihler gösteriliyor.' }));
+    } else if(rangeActive){
+      var lblF = rFrom !== null ? new Date(rFrom).toLocaleDateString('tr-TR', { day:'numeric', month:'long', year:'numeric' }) : 'başlangıç';
+      var lblT = rTo !== null ? new Date(rTo).toLocaleDateString('tr-TR', { day:'numeric', month:'long', year:'numeric' }) : 'bugün ve sonrası';
+      root.appendChild(el('div', { class:'daysum', text:'🔎 ' + lblF + ' – ' + lblT + ' aralığı gösteriliyor: ' + rows.length + ' madde' + (mins ? ' • ' + fmtMin(mins) : '') + (swapped ? ' (başlangıç bitişten sonraydı, yer değiştirildi)' : '') }));
+    }
+    root.appendChild(manualForm());
+
+    function tile(v, l){ return el('div', { class:'tile' }, [ el('div', { class:'v', text: v }), el('div', { class:'l', text: l }) ]); }
+    root.appendChild(el('div', { class:'tiles' }, [
+      tile(String(rows.length), rangeActive ? 'Aralıktaki tamamlanan' : 'Toplam tamamlanan'),
+      tile(String(cToday), 'Bugün'),
+      tile(String(c7), 'Son 7 gün'),
+      tile(mins ? fmtMin(mins) : '—', 'Toplam çalışma süresi'),
+      tile(wkMins ? fmtMin(wkMins) : '—', 'Bu hafta çalışma süresi'),
+      tile(String(noDur), 'Süresi girilmemiş'),
+      tile(fmtDays(leaveTotal()), 'Kazanılan izin')
+    ]));
+
+    var counts = {};
+    rows.forEach(function(x){ if(x.it.doneAt){ var k = dayKey(x.it.doneAt); counts[k] = (counts[k] || 0) + 1; } });
+    var days = [], max = 1;
+    for(var i = 13; i >= 0; i--){
+      var d = new Date(); d.setDate(d.getDate() - i);
+      var k = dayKey(d.getTime());
+      var c = counts[k] || 0;
+      if(c > max) max = c;
+      days.push({ key: k, day: d.getDate(), count: c, mins: dayMinsMap[k] || 0 });
+    }
+    var chart = el('div', { class:'chart', role:'img' });
+    days.forEach(function(x){
+      chart.appendChild(el('div', { class:'cc', title: fmtDay(x.key) + ': ' + x.count + ' madde' + (x.mins ? ' • ' + fmtMin(x.mins) : '') }, [
+        el('span', { class:'val', text: x.count ? String(x.count) : '' }),
+        el('div', { class:'bar' + (x.count ? '' : ' zero'), style:'height:' + (x.count ? Math.max(4, Math.round(x.count / max * 100)) : 2) + 'px' }),
+        el('span', { class:'lbl', text: String(x.day) })
+      ]));
+    });
+    root.appendChild(el('div', { class:'panel' }, [ el('h2', { text:'Son 14 günde tamamlanan maddeler' }), chart ]));
+
+    /* Haftalık toplam çalışma süresi (son 8 hafta) */
+    var wdata = [], wmax = 1, curWk = mondayKey(Date.now());
+    for(var wi = 7; wi >= 0; wi--){
+      var wkKey2 = shiftKey(curWk, -7 * wi), wm = wkMinsMap[wkKey2] || 0;
+      if(wm > wmax) wmax = wm;
+      wdata.push({ key: wkKey2, m: wm });
+    }
+    var wchart = el('div', { class:'chart', role:'img' });
+    var anyWk = false;
+    wdata.forEach(function(w){
+      if(w.m) anyWk = true;
+      var ws = keyToDate(w.key), we = keyToDate(shiftKey(w.key, 6));
+      var shortFmt = { day:'numeric', month:'short' };
+      var lbl = ws.toLocaleDateString('tr-TR', shortFmt);
+      wchart.appendChild(el('div', { class:'cc', title: lbl + ' – ' + we.toLocaleDateString('tr-TR', shortFmt) + ' haftası: ' + (w.m ? fmtMin(w.m) : 'süre girilmemiş') }, [
+        el('span', { class:'val', text: w.m ? String(Math.round(w.m / 6) / 10).replace('.', ',') + ' sa' : '' }),
+        el('div', { class:'bar' + (w.m ? '' : ' zero'), style:'height:' + (w.m ? Math.max(4, Math.round(w.m / wmax * 100)) : 2) + 'px' }),
+        el('span', { class:'lbl', text: lbl })
+      ]));
+    });
+    root.appendChild(el('div', { class:'panel' }, [
+      el('h2', { text:'Haftalık toplam çalışma süresi (son 8 hafta)' }), wchart,
+      anyWk ? null : el('div', { class:'empty', text:'Bu haftalarda süre girilmiş madde yok.' })
+    ]));
+
+    var agg = {};
+    inRange.forEach(function(x){
+      var a = agg[x.p.id] = agg[x.p.id] || { p: x.p, n: 0, m: 0, last: 0 };
+      a.n++; if(x.it.minutes) a.m += x.it.minutes;
+      if((x.it.doneAt || 0) > a.last) a.last = x.it.doneAt || 0;
+    });
+    var aggList = Object.keys(agg).map(function(k){ return agg[k]; }).sort(function(a, b){ return b.n - a.n; });
+    root.appendChild(el('h2', { text:'Proje özeti' }));
+    if(aggList.length){
+      var tb = el('tbody');
+      aggList.forEach(function(a){
+        tb.appendChild(el('tr', null, [
+          el('td', { text: a.p.title }),
+          el('td', { class:'nw', text: String(a.n) }),
+          el('td', { class:'nw', text: a.m ? fmtMin(a.m) : '—' }),
+          el('td', { class:'nw', text: fmt(a.last) })
+        ]));
+      });
+      root.appendChild(el('div', { class:'tblwrap' }, [ el('table', null, [
+        el('thead', null, [ el('tr', null, [ el('th', { text:'Proje' }), el('th', { text:'Tamamlanan' }), el('th', { text:'Çalışma süresi' }), el('th', { text:'Son tamamlanma' }) ]) ]),
+        tb
+      ]) ]));
+    } else {
+      root.appendChild(el('div', { class:'empty', text: rangeActive ? 'Seçili aralıkta tamamlanan iş yok.' : 'Henüz tamamlanan iş yok.' }));
+    }
+
+    root.appendChild(el('h2', { text:'Tamamlanan işler' }));
+    if(rows.length){
+      var sorted = rows.slice().sort(function(a, b){ return (b.it.doneAt || 0) - (a.it.doneAt || 0); });
+      var body = el('tbody');
+      sorted.forEach(function(x){
+        var itemCell = el('td', null, editKey === 'i:' + x.it.id
+          ? [ editForm(x.it.text, 200, function(v){ editItem(x.p.id, x.t.id, x.it.id, v); }) ]
+          : [ el('div', { text: x.it.text }),
+              el('div', { class:'rowacts' }, [ noteBtn(x.it), editBtn('i:' + x.it.id, 'Maddeyi') ]),
+              noteBlock(x.it) ]);
+        var editingDate = editKey === 'd:' + x.it.id;
+        body.appendChild(el('tr', null, [
+          el('td', { class: editingDate ? '' : 'nw' }, [ editingDate ? dateForm(x.it) : dateBtn(x.it, false) ]),
+          el('td', { text: x.p.title }),
+          el('td', { text: x.t.title }),
+          itemCell,
+          el('td', null, [ editKey === 'm:' + x.it.id ? durForm(x.it) : durBtn(x.it) ])
+        ]));
+      });
+      root.appendChild(el('div', { class:'tblwrap' }, [ el('table', null, [
+        el('thead', null, [ el('tr', null, [ el('th', { text:'Tamamlanma' }), el('th', { text:'Proje' }), el('th', { text:'İş' }), el('th', { text:'Madde' }), el('th', { text:'Süre' }) ]) ]),
+        body
+      ]) ]));
+    } else {
+      root.appendChild(el('div', { class:'empty', text: rangeActive ? 'Seçili aralıkta tamamlanan iş yok.' : 'Henüz tamamlanan iş yok.' }));
+    }
+  }
+
+  function updateStats(){
+    var open = 0, done = 0;
+    state.projects.forEach(function(p){ p.tasks.forEach(function(t){ t.items.forEach(function(i){
+      if(i.done) done++; else open++;
+    }); }); });
+    document.getElementById('stats').textContent = open + ' açık • ' + done + ' tamamlandı';
+  }
+
+  function render(focusKey){
+    updateStats();
+    ['tasks', 'cal', 'dash', 'search'].forEach(function(k){ document.getElementById('tab-' + k).hidden = (k !== tab); });
+    Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
+      var on = b.getAttribute('data-tab') === tab;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+
+    if(tab === 'tasks') renderTasks();
+    else if(tab === 'cal') renderCalendar();
+    else if(tab === 'search') renderSearch();
+    else renderDashboard();
+
+    var target = null;
+    if(editKey){
+      target = document.querySelector('[data-edit]');
+      if(target){
+        if(target.tagName === 'TEXTAREA'){ var n = target.value.length; target.setSelectionRange(n, n); }
+        else target.select();
+      }
+    } else if(focusKey){
+      target = document.querySelector('[data-key="' + focusKey + '"]');
+    }
+    if(target) target.focus();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
+    b.addEventListener('click', function(){
+      tab = b.getAttribute('data-tab');
+      editKey = null;
+      render();
+      if(tab === 'search'){ var si = document.getElementById('searchInput'); si.focus(); si.select(); }
+    });
+  });
+  document.getElementById('projectForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var inp = document.getElementById('projectInput');
+    addProject(inp.value);
+    inp.value = '';
+  });
+  document.getElementById('clearDone').addEventListener('click', clearDone);
+  document.getElementById('searchInput').addEventListener('input', function(e){ searchQ = e.target.value; renderSearch(); });
+  document.getElementById('searchInput').addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && searchQ){ e.preventDefault(); searchQ = ''; renderSearch(); }
+  });
+  /* "/" veya Ctrl+K ile her yerden aramaya geç */
+  document.addEventListener('keydown', function(e){
+    var t = e.target, typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    if((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)){ e.preventDefault(); openSearch(); }
+    else if(e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey){ e.preventDefault(); openSearch(); }
+  });
+
+  var now0 = new Date();
+  calYear = now0.getFullYear(); calMonth = now0.getMonth(); selDay = dayKey(now0.getTime());
+  weekKey = mondayKey(now0.getTime());
+
+  render();
+  updateBar();
+  initFileHandle();
+  driveInit();
+})();
+</script>
+</body>
+</html>
