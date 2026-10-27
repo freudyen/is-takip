@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>İş Takip (Modüler JSON)</title>
+<title>İş Takip</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3b6cf6">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
@@ -200,6 +204,8 @@
   .aform{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
   .aform input[type=text]{flex:1 1 220px;padding:8px 10px}
   .arow-item.due .atime{color:var(--danger);font-weight:600}
+  .notebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:10px;font-size:14px}
+  .notebar .nsub{flex:1 1 220px;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
@@ -959,6 +965,29 @@
 
   /* ---------- Hatırlatıcı (tarih-saatli uyarılar) ---------- */
   var snoozeId = null, snoozeVal = '', snoozeErr = '', lastDueKey = '';
+  /* Sistem bildirimi (Windows/Mac/Android bildirim merkezi). Sayfa ya da yüklü uygulama penceresi açıkken çalışır. */
+  var notified = {};
+  function notifyOK(){ return typeof Notification !== 'undefined'; }
+  function systemNotify(a){
+    if(!notifyOK() || Notification.permission !== 'granted') return;
+    var key = a.id + ':' + a.at;
+    if(notified[key]) return;
+    if(document.hasFocus()) return;           /* sayfa önde ve odakta: üstteki bant yeterli */
+    notified[key] = true;
+    var title = '⏰ Hatırlatıcı', opts = { body: a.text, tag: a.id, requireInteraction: true, icon: 'icon-192.png', badge: 'icon-192.png' };
+    function fallback(){ try { new Notification(title, opts); } catch(e){} }
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistration){
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if(reg && reg.showNotification) reg.showNotification(title, opts).catch(fallback); else fallback();
+      }, fallback);
+    } else fallback();
+  }
+  function closeNotice(id){
+    if(!(navigator.serviceWorker && navigator.serviceWorker.getRegistration)) return;
+    navigator.serviceWorker.getRegistration().then(function(reg){
+      if(reg && reg.getNotifications) reg.getNotifications({ tag: id }).then(function(l){ l.forEach(function(n){ n.close(); }); });
+    }).catch(function(){});
+  }
   function alarmList(){ if(!Array.isArray(state.alarms)) state.alarms = []; return state.alarms; }
   function dueAlarms(){
     var now = Date.now();
@@ -972,6 +1001,7 @@
     commit('alarm');
   }
   function ackAlarm(id){
+    closeNotice(id);
     state.alarms = alarmList().filter(function(a){ return a.id !== id; });
     if(snoozeId === id) snoozeId = null;
     commit();
@@ -994,6 +1024,7 @@
     lastDueKey = due.map(function(a){ return a.id + ':' + a.at; }).join('|');
     bar.innerHTML = '';
     due.forEach(function(a){
+      systemNotify(a);
       var kids = [
         el('div', { class:'arow' }, [
           el('span', { text:'⏰', 'aria-hidden':'true' }),
@@ -1046,6 +1077,19 @@
     var when = el('input', { type:'datetime-local', 'aria-label':'Hatırlatma zamanı' });
     when.value = defaultAlarmValue(60);
     var err = el('span', { class:'err' });
+    if(notifyOK()){
+      var perm = Notification.permission, nb;
+      if(perm === 'granted'){
+        nb = [ el('span', { text:'🔔 Bildirimler açık' }), el('span', { class:'nsub', text:'Zamanı gelince, uygulama arka planda açıkken de bilgisayar/telefon bildirimi gelir. Uygulama tamamen kapalıysa bildirim gelmez; açtığınızda üstte uyarı çıkar.' }) ];
+      } else if(perm === 'denied'){
+        nb = [ el('span', { text:'🔕 Bildirimler engelli' }), el('span', { class:'nsub', text:'Tarayıcı bu siteye bildirimi engellemiş. Adres çubuğundaki 🔒 simgesi → Bildirimler → İzin ver, sonra sayfayı yenileyin.' }) ];
+      } else {
+        nb = [ el('button', { type:'button', class:'primary small', text:'🔔 Bildirimleri aç', onclick:function(){
+          try { var r = Notification.requestPermission(function(){ render(); }); if(r && r.then) r.then(function(){ render(); }); } catch(e){ render(); }
+        } }), el('span', { class:'nsub', text:'Hatırlatma zamanı gelince sistem bildirimi göndermek için izin gerekir.' }) ];
+      }
+      root.appendChild(el('div', { class:'notebar' }, nb));
+    }
     root.appendChild(el('div', { class:'panel' }, [
       el('h2', { text:'Yeni hatırlatıcı' }),
       el('form', { class:'aform', onsubmit:function(e){
@@ -2353,6 +2397,9 @@
   });
   document.getElementById('clearDone').addEventListener('click', clearDone);
   setInterval(alarmTick, 15000);
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  }
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) alarmTick(); });
   document.getElementById('searchInput').addEventListener('input', function(e){ searchQ = e.target.value; renderSearch(); });
   document.getElementById('searchInput').addEventListener('keydown', function(e){
