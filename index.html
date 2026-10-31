@@ -1081,8 +1081,31 @@ function loadGis(){
   });
   return drive.gisP;
 }
+/* Yüklü uygulama penceresi (standalone) Google'ın sessiz giriş akışını
+   engelliyor; tarayıcı sekmesinde aynı sorun çıkmıyor. Bu yüzden alınan
+   yetki belgesi süresi dolana kadar cihazda saklanır: uygulama yeniden
+   açıldığında Google'a hiç gidilmeden bağlantı kurulur. */
+function isStandalone(){
+  try { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) ||
+               (window.matchMedia && matchMedia('(display-mode: window-controls-overlay)').matches) ||
+               navigator.standalone === true; } catch(e){ return false; }
+}
+function storedToken(){
+  try {
+    var o = JSON.parse(lsGet('is-takip-gtok') || 'null');
+    if(o && o.t && o.exp && o.cid === driveClientId() && Date.now() < o.exp - 120000) return o;
+  } catch(e){}
+  return null;
+}
+function keepToken(t, ms){
+  drive.token = t; drive.exp = Date.now() + ms;
+  lsSet('is-takip-gtok', JSON.stringify({ t: t, exp: drive.exp, cid: driveClientId() }));
+}
+function dropToken(){ drive.token = null; drive.exp = 0; lsSet('is-takip-gtok', null); }
 function driveToken(interactive){
   if(drive.token && Date.now() < drive.exp - 60000) return Promise.resolve(drive.token);
+  var st = storedToken();
+  if(st){ drive.token = st.t; drive.exp = st.exp; return Promise.resolve(st.t); }
   if(drive.tokenP) return drive.tokenP;
   var id = driveClientId();
   if(!id) return Promise.reject(authErr('Google istemci kimliği girilmemiş.'));
@@ -1092,7 +1115,7 @@ function driveToken(interactive){
         client_id: id, scope: DRIVE_SCOPE,
         callback: function(r){
           if(!r || r.error || !r.access_token) return rej(authErr((r && r.error) || 'Giriş yapılamadı.'));
-          drive.token = r.access_token; drive.exp = Date.now() + (+r.expires_in || 3600) * 1000;
+          keepToken(r.access_token, (+r.expires_in || 3600) * 1000);
           res(r.access_token);
         },
         error_callback: function(e){ rej(authErr((e && (e.type || e.message)) || 'Giriş yapılamadı.')); }
@@ -1108,7 +1131,7 @@ function driveFetch(url, opts, interactive, retried){
     o.headers = Object.assign({}, o.headers, { Authorization: 'Bearer ' + t });
     return fetch(url, o);
   }).then(function(r){
-    if(r.status === 401 && !retried){ drive.token = null; return driveFetch(url, opts, interactive, true); }
+    if(r.status === 401 && !retried){ dropToken(); return driveFetch(url, opts, interactive, true); }
     if(!r.ok){ var e = new Error('Drive hatası (' + r.status + ')'); e.status = r.status; throw e; }
     return r;
   });
@@ -1347,7 +1370,8 @@ function driveDisconnect(){
     try { if(window.google && google.accounts && google.accounts.oauth2 && google.accounts.oauth2.revoke) google.accounts.oauth2.revoke(drive.token); } catch(e){}
   }
   drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = ''; drive.picker = null;
-  drive.folderId = drive.backupsId = drive.fileId = drive.md5 = drive.revId = null; drive.token = null;
+  drive.folderId = drive.backupsId = drive.fileId = drive.md5 = drive.revId = null;
+  dropToken();
   lsSet('is-takip-drive', null);
   updateBar();
 }
@@ -1833,6 +1857,7 @@ function driveBarParts(){
   else if(drive.needsLogin){
     cls += ' warn';
     msg = '☁ Drive bağlantısı için yeniden giriş gerekli — düğmeye bir kez basmanız yeterli; verileriniz bu arada bu cihazda saklanıyor.' +
+      (isStandalone() ? ' (Yüklü uygulama penceresinde Google tıklamasız girişe izin vermiyor; tarayıcı sekmesinde bu sorun çıkmaz. Bir kez bağlandığınızda yetki yaklaşık bir saat hatırlanır.)' : '') +
       (drive.loginReason ? ' (Sebep: ' + drive.loginReason + ')' : '');
   }
   else if(drive.on && drive.busy){ cls += ' warn'; msg = '● Drive\'a yazılıyor…'; }
