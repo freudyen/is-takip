@@ -268,6 +268,19 @@
   .toast{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);font-size:14px}
   .toast .ttxt{flex:1;word-break:break-word}
   .toast.err{border-left-color:var(--danger)}
+  /* Not defteri */
+  .nbnew,.nbform{display:flex;flex-direction:column;gap:8px}
+  .nbnew input[type=text],.nbform input[type=text]{width:100%;font-weight:600}
+  .nbnew textarea,.nbform textarea{width:100%;min-height:90px}
+  .nbnew .err,.nbform .err{color:var(--danger);font-size:13px}
+  .nbnew .err:empty,.nbform .err:empty{display:none}
+  .nblist{display:flex;flex-direction:column;gap:10px}
+  .nbcard{background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .nbhead{display:flex;align-items:flex-start;gap:8px}
+  .nbhead h3{margin:0;font-size:16px;flex:1;min-width:0;word-break:break-word;padding-top:4px}
+  .nbhead h3.untitled{color:var(--muted);font-style:italic}
+  .nbbody{white-space:pre-wrap;word-break:break-word;margin-top:6px}
+  .nbmeta{font-size:12px;color:var(--muted);margin-top:8px}
   /* Arşiv & çöp */
   .arcrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .arcrow .what{flex:1 1 220px;word-break:break-word}
@@ -311,6 +324,7 @@
     <button type="button" role="tab" id="tabbtn-cal" aria-controls="tab-cal" data-tab="cal" aria-selected="false">📅 Takvim</button>
     <button type="button" role="tab" id="tabbtn-dash" aria-controls="tab-dash" data-tab="dash" aria-selected="false">📊 Dashboard</button>
     <button type="button" role="tab" id="tabbtn-alarm" aria-controls="tab-alarm" data-tab="alarm" aria-selected="false">⏰ Hatırlatıcı</button>
+    <button type="button" role="tab" id="tabbtn-notebook" aria-controls="tab-notebook" data-tab="notebook" aria-selected="false">📓 Not Defteri</button>
     <button type="button" role="tab" id="tabbtn-archive" aria-controls="tab-archive" data-tab="archive" aria-selected="false">🗄 Arşiv</button>
     <button type="button" role="tab" id="tabbtn-search" aria-controls="tab-search" data-tab="search" aria-selected="false" title="Ara ( / tuşu )">🔍 Ara</button>
   </nav>
@@ -340,9 +354,10 @@
   <div id="tab-cal" role="tabpanel" aria-labelledby="tabbtn-cal" tabindex="-1" hidden><div id="calView"></div></div>
   <div id="tab-dash" role="tabpanel" aria-labelledby="tabbtn-dash" tabindex="-1" hidden><div id="dashView"></div></div>
   <div id="tab-alarm" role="tabpanel" aria-labelledby="tabbtn-alarm" tabindex="-1" hidden><div id="alarmView"></div></div>
+  <div id="tab-notebook" role="tabpanel" aria-labelledby="tabbtn-notebook" tabindex="-1" hidden><div id="notebookView"></div></div>
   <div id="tab-archive" role="tabpanel" aria-labelledby="tabbtn-archive" tabindex="-1" hidden><div id="archiveView"></div></div>
   <div id="tab-search" role="tabpanel" aria-labelledby="tabbtn-search" tabindex="-1" hidden>
-    <div class="searchbox"><input type="search" id="searchInput" placeholder="Ara: proje, iş, madde, not, hatırlatma, haftalık plan…" maxlength="100" autocomplete="off" aria-label="Genel arama"></div>
+    <div class="searchbox"><input type="search" id="searchInput" placeholder="Ara: proje, iş, madde, not defteri, hatırlatma, haftalık plan…" maxlength="100" autocomplete="off" aria-label="Genel arama"></div>
     <div class="sfilters" id="searchFilters"></div>
     <div id="searchView"></div>
   </div>
@@ -529,7 +544,7 @@ function renderNotice(){
 var migrationInfo = null;     /* { from, projects, tasks, items } */
 
 function emptyState(){
-  return { schemaVersion: SCHEMA, projects: [], weekly: {}, leave: { days:{}, notes:{}, ledger:[], adjust:0 }, alarms: [], trash: [] };
+  return { schemaVersion: SCHEMA, projects: [], weekly: {}, leave: { days:{}, notes:{}, ledger:[], adjust:0 }, alarms: [], notebook: [], trash: [] };
 }
 
 function normItem(raw){
@@ -657,6 +672,19 @@ function normAlarms(raw){
     return (x.text && isFinite(x.at)) ? x : null;
   }).filter(Boolean);
 }
+/* Not defteri: işlerden bağımsız serbest notlar (başlık isteğe bağlı) */
+function normNotebook(raw){
+  return (Array.isArray(raw) ? raw : []).map(function(n){
+    if(!n || typeof n !== 'object') return null;
+    var x = Object.assign({}, n);
+    x.id = str(x.id) || uid();
+    x.title = str(x.title);
+    x.body = str(x.body != null ? x.body : x.text);
+    x.createdAt = okTime(x.createdAt);
+    x.updatedAt = okTime(x.updatedAt) || x.createdAt;
+    return (x.title.trim() || x.body.trim()) ? x : null;
+  }).filter(Boolean);
+}
 function normTrash(raw){
   var cut = Date.now() - TRASH_DAYS * 86400000;
   return (Array.isArray(raw) ? raw : []).map(function(t){
@@ -679,6 +707,7 @@ function normalize(raw){
   out.weekly = normWeekly(s.weekly);
   out.leave = normLeave(s.leave);
   out.alarms = normAlarms(s.alarms);
+  out.notebook = normNotebook(s.notebook);
   out.trash = normTrash(s.trash);
   out.schemaVersion = SCHEMA;
   var nt = 0, ni = 0;
@@ -691,10 +720,11 @@ function dataSummary(s){
   var nt = 0, ni = 0;
   (s.projects || []).forEach(function(p){ nt += p.tasks.length; p.tasks.forEach(function(t){ ni += t.items.length; }); });
   return (s.projects || []).length + ' proje, ' + nt + ' iş, ' + ni + ' madde, ' +
-         (s.alarms || []).length + ' hatırlatıcı, ' + Object.keys(s.leave && s.leave.days || {}).length + ' izin günü';
+         (s.alarms || []).length + ' hatırlatıcı, ' + (s.notebook || []).length + ' not, ' +
+         Object.keys(s.leave && s.leave.days || {}).length + ' izin günü';
 }
 function isEmptyState(s){
-  return !(s && ((s.projects || []).length || (s.alarms || []).length ||
+  return !(s && ((s.projects || []).length || (s.alarms || []).length || (s.notebook || []).length ||
     Object.keys(s.weekly || {}).length || Object.keys((s.leave && s.leave.days) || {}).length ||
     ((s.leave && s.leave.ledger) || []).length));
 }
@@ -1494,7 +1524,7 @@ function sameVisibility(a, b){ return (!a.archived) === (!b.archived); }
 function sameItemGroup(a, b){ return !!a.done === !!b.done && (!a.archived) === (!b.archived); }
 
 /* --- çöp kutusu (30 gün) ------------------------------------------------- */
-var KIND_LABEL = { project:'Proje', task:'İş', item:'Madde', reminder:'Hatırlatma', weekly:'Haftalık plan', alarm:'Hatırlatıcı', leaveday:'İzin günü', ledger:'İzin hareketi' };
+var KIND_LABEL = { project:'Proje', task:'İş', item:'Madde', reminder:'Hatırlatma', weekly:'Haftalık plan', alarm:'Hatırlatıcı', leaveday:'İzin günü', ledger:'İzin hareketi', note:'Not' };
 function trashPush(kind, label, data, loc){
   if(!Array.isArray(state.trash)) state.trash = [];
   var entry = { id: uid(), at: Date.now(), kind: kind, label: snip(label, 90), data: clone(data), loc: loc || {} };
@@ -1530,6 +1560,7 @@ function restoreTrash(id, quiet){
     state.leave.days[e.data.key] = e.data.value;
     if(e.data.note) state.leave.notes[e.data.key] = e.data.note;
   } else if(e.kind === 'ledger') state.leave.ledger.push(e.data);
+  else if(e.kind === 'note') ins(noteList(), e.loc.index, e.data);
   if(!ok){ toast('Geri yüklenemedi. ' + where, { bad:true }); return; }
   state.trash.splice(i, 1);
   commit();
@@ -1820,6 +1851,33 @@ function snoozeAlarm(id, mins){
 }
 function alarmsForDay(key){
   return alarmList().filter(function(a){ return dayKey(a.at) === key; }).sort(function(a, b){ return a.at - b.at; });
+}
+
+/* --- not defteri --------------------------------------------------------- */
+function noteList(){ if(!Array.isArray(state.notebook)) state.notebook = []; return state.notebook; }
+function noteLabel(n){ return n.title || snip(n.body, 60) || 'Başlıksız not'; }
+function addNote(title, body){
+  title = str(title).trim(); body = str(body).replace(/\s+$/, '').replace(/^\s*\n/, '');
+  if(!title && !body.trim()) return;
+  var now = Date.now();
+  noteList().unshift({ id: uid(), title: title, body: body, createdAt: now, updatedAt: now });
+  commit('note-new');
+}
+function editNote(id, title, body){
+  var n = noteList().find(function(x){ return x.id === id; });
+  if(!n) return;
+  n.title = str(title).trim(); n.body = str(body).replace(/\s+$/, '').replace(/^\s*\n/, '');
+  n.updatedAt = Date.now();
+  commit();
+}
+function deleteNote(id){
+  var list = noteList();
+  var i = list.findIndex(function(x){ return x.id === id; });
+  if(i < 0) return;
+  var e = trashPush('note', noteLabel(list[i]), list[i], { index:i });
+  list.splice(i, 1);
+  commit();
+  deletedToast(e);
 }
 
 /* --- ajanda (son tarihler) ---------------------------------------------- */
@@ -3279,6 +3337,90 @@ function renderAlarms(){
   root.appendChild(panel);
 }
 
+/* --- Not defteri --------------------------------------------------------- */
+/* Yeni not taslağı, araya giren yeniden çizimlerde (örn. Drive eşitlemesi) kaybolmasın */
+var noteDraft = { title:'', body:'' };
+function noteFields(title, body, rows, onSave, isEdit){
+  var ti = el('input', { type:'text', maxlength:'120', autocomplete:'off', 'aria-label':'Not başlığı',
+    placeholder: isEdit ? 'Başlık (isteğe bağlı)' : 'Başlık (isteğe bağlı) — aramada bulmayı kolaylaştırır',
+    'data-key': isEdit ? null : 'note-new' });
+  ti.value = title || '';
+  var ta = el('textarea', { rows:String(rows), maxlength:'20000', 'aria-label':'Not metni', 'data-edit': isEdit ? '1' : null,
+    placeholder: isEdit ? '' : 'Notunuzu yazın…' });
+  ta.value = body || '';
+  var err = el('span', { class:'err' });
+  function save(){
+    if(!ti.value.trim() && !ta.value.trim()){ err.textContent = 'Bir başlık ya da metin yazın.'; return; }
+    onSave(ti.value, ta.value);
+  }
+  [ti, ta].forEach(function(i){
+    i.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && isEdit){ e.preventDefault(); cancelEdit(); }
+      else if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); save(); }
+    });
+  });
+  if(!isEdit){
+    ti.addEventListener('input', function(){ noteDraft.title = ti.value; });
+    ta.addEventListener('input', function(){ noteDraft.body = ta.value; });
+  }
+  var btns = [ el('button', { type:'submit', class:'primary small', text: isEdit ? 'Kaydet' : 'Not Ekle' }) ];
+  if(isEdit) btns.push(el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }));
+  btns.push(el('span', { class:'hintx', text:'Enter: alt satır • Ctrl+Enter: kaydet' + (isEdit ? ' • Esc: iptal' : '') }));
+  return el('form', { class: isEdit ? 'nbform' : 'nbnew', onsubmit:function(e){ e.preventDefault(); save(); } }, [
+    ti, ta, el('div', { class:'noteactions' }, btns), err
+  ]);
+}
+function copyNote(n){
+  var txt = (n.title ? n.title + '\n\n' : '') + (n.body || '');
+  if(!(navigator.clipboard && navigator.clipboard.writeText)){ toast('Bu tarayıcı panoya kopyalamayı desteklemiyor.', { bad:true }); return; }
+  navigator.clipboard.writeText(txt).then(function(){ toast('Not panoya kopyalandı.'); },
+    function(){ toast('Panoya kopyalanamadı.', { bad:true }); });
+}
+function renderNotebook(){
+  var root = clear(document.getElementById('notebookView'));
+  root.appendChild(el('div', { class:'panel' }, [
+    el('h2', { text:'📓 Yeni not' }),
+    noteFields(noteDraft.title, noteDraft.body, 4, function(t, b){
+      noteDraft = { title:'', body:'' };
+      addNote(t, b);
+    }, false)
+  ]));
+
+  var list = noteList().slice().sort(function(a, b){ return (b.updatedAt || 0) - (a.updatedAt || 0); });
+  var panel = el('div', { class:'panel' }, [ el('h2', { text:'Notlar (' + list.length + ')' }) ]);
+  if(!list.length){
+    panel.appendChild(el('div', { class:'empty', text:'Henüz not yok. Buradaki notlar işlerden bağımsızdır; başlık verirseniz 🔍 Ara sekmesinden kolayca bulabilirsiniz.' }));
+  } else {
+    var box = el('div', { class:'nblist' });
+    list.forEach(function(n){
+      if(editKey === 'nb:' + n.id){
+        box.appendChild(el('div', { class:'nbcard', 'data-sid': n.id }, [
+          noteFields(n.title, n.body, 8, function(t, b){ editKey = null; editNote(n.id, t, b); }, true)
+        ]));
+        return;
+      }
+      var edited = n.updatedAt && n.createdAt && n.updatedAt - n.createdAt > 60000;
+      box.appendChild(el('div', { class:'nbcard', 'data-sid': n.id, title:'Düzenlemek için çift tıklayın',
+        ondblclick:function(e){ if(!(e.target.closest && e.target.closest('.rowmenu'))) startEdit('nb:' + n.id); } }, [
+        el('div', { class:'nbhead' }, [
+          el('h3', { class: n.title ? null : 'untitled', text: n.title || 'Başlıksız not' }),
+          menu([
+            mBtn('✎ Düzenle', function(){ startEdit('nb:' + n.id); }),
+            mBtn('📋 Panoya kopyala', function(){ copyNote(n); }),
+            mSep(),
+            mBtn('🗑 Sil', function(){ deleteNote(n.id); }, 'del')
+          ])
+        ]),
+        n.body ? el('div', { class:'nbbody', text: n.body }) : null,
+        el('div', { class:'nbmeta', text: (n.createdAt ? 'Oluşturuldu: ' + fmt(n.createdAt) : '') +
+          (edited ? ' • Düzenlendi: ' + fmt(n.updatedAt) : '') })
+      ]));
+    });
+    panel.appendChild(box);
+  }
+  root.appendChild(panel);
+}
+
 /* --- Arşiv ve çöp kutusu ------------------------------------------------- */
 function renderArchive(){
   var root = clear(document.getElementById('archiveView'));
@@ -3448,7 +3590,7 @@ function goDay(key, weekly){
   else flashEl(document.querySelector('.xbox') || document.querySelector('[data-day="' + key + '"]'));
 }
 function collectResults(words){
-  var G = { proje:[], is:[], madde:[], hat:[], hafta:[], izin:[], alarm:[] };
+  var G = { proje:[], is:[], madde:[], hat:[], hafta:[], izin:[], alarm:[], not:[] };
   var wantOpen = searchStatus === 'open', wantDone = searchStatus === 'done';
   state.projects.forEach(function(p){
     if(p.archived && !searchArchived) return;
@@ -3494,6 +3636,12 @@ function collectResults(words){
         go:function(){ switchTab('alarm'); flashEl(findBySid(a.id)); } });
     }
   });
+  noteList().slice().sort(function(a, b){ return (b.updatedAt || 0) - (a.updatedAt || 0); }).forEach(function(n){
+    if(!matches(words, n.title + ' ' + n.body)) return;
+    G.not.push({ main: n.title || n.body, note: n.title ? n.body : null,
+      meta: (n.title ? '' : 'Başlıksız not • ') + (n.updatedAt ? fmt(n.updatedAt) : ''),
+      go:function(){ switchTab('notebook'); flashEl(findBySid(n.id)); } });
+  });
   var L = leaveData();
   Object.keys(L.notes).sort().reverse().forEach(function(k){
     if(matches(words, L.notes[k] + ' ' + fmtDay(k))){
@@ -3507,6 +3655,7 @@ function collectResults(words){
   });
   var all = [
     ['proje','📁 Projeler', G.proje], ['is','🗂 İşler', G.is], ['madde','✅ Maddeler', G.madde],
+    ['not','📓 Not defteri', G.not],
     ['hat','📌 Hatırlatmalar', G.hat], ['alarm','⏰ Hatırlatıcılar', G.alarm],
     ['hafta','🗓 Haftalık plan', G.hafta], ['izin','★ İzin kayıtları', G.izin]
   ];
@@ -3517,6 +3666,7 @@ function renderSearchFilters(){
   var gsel = el('select', { 'aria-label':'Arama kapsamı', onchange:function(e){ searchGroup = e.target.value; renderSearch(); } }, [
     el('option', { value:'all', text:'Her yerde' }), el('option', { value:'proje', text:'Projeler' }),
     el('option', { value:'is', text:'İşler' }), el('option', { value:'madde', text:'Maddeler' }),
+    el('option', { value:'not', text:'Not defteri' }),
     el('option', { value:'hat', text:'Hatırlatmalar' }), el('option', { value:'alarm', text:'Hatırlatıcılar' }),
     el('option', { value:'hafta', text:'Haftalık plan' }), el('option', { value:'izin', text:'İzin kayıtları' })
   ]);
@@ -3580,7 +3730,7 @@ function updateStats(){
   var over = dueItems().filter(function(x){ return dayDiff(x.due, todayKey()) < 0; }).length;
   document.getElementById('stats').textContent = open + ' açık • ' + done + ' tamamlandı' + (over ? ' • ' + over + ' geciken' : '');
 }
-var TABS = ['tasks','cal','dash','alarm','archive','search'];
+var TABS = ['tasks','cal','dash','alarm','notebook','archive','search'];
 function switchTab(t){
   if(t === tab) return;
   prevTab = tab; tab = t; editKey = null;
@@ -3605,6 +3755,7 @@ function renderInner(focusKey){
   else if(tab === 'cal') renderCalendar();
   else if(tab === 'dash') renderDashboard();
   else if(tab === 'alarm') renderAlarms();
+  else if(tab === 'notebook') renderNotebook();
   else if(tab === 'archive') renderArchive();
   else if(tab === 'search') renderSearch();
   renderAlarmBar();
