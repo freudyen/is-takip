@@ -810,8 +810,17 @@ function adoptData(data, label){
 function afterLoad(label){
   editKey = null;
   if(migrationInfo && migrationInfo.upgraded && !isEmptyState(state)){
-    setNotice({ text:'Veriler eski sürümden yeni biçime taşındı (' + dataSummary(state) + '). Her şey yerinde görünüyor; yine de bir yedek almanız iyi olur.',
-      buttons:[ { label:'📤 Yedeği indir', fn: downloadBackup } ] });
+    /* Taşınan biçimi kaynağa geri yaz. Yazılmazsa dosya eski biçimde kalır,
+       uygulama her açılışta yeniden taşır ve aynı uyarı tekrar tekrar çıkar. */
+    dirty = true;
+    changed();
+    /* Uyarı cihaz başına bir kez gösterilir (yazma başarısız olsa bile
+       kullanıcıyı her açılışta rahatsız etmesin). */
+    if(lsGet('is-takip-migrated') !== String(SCHEMA)){
+      lsSet('is-takip-migrated', String(SCHEMA));
+      setNotice({ text:'Veriler eski sürümden yeni biçime taşındı (' + dataSummary(state) + ') ve bu biçimde kaydedildi. Bu uyarı bir daha çıkmayacak; yine de bir yedek almanız iyi olur.',
+        buttons:[ { label:'📤 Yedeği indir', fn: downloadBackup } ] });
+    }
   }
   render();
   updateBar();
