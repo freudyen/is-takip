@@ -1049,7 +1049,7 @@ var GOOGLE_CLIENT_ID = '';
 var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 var DRIVE_FOLDER = 'İş Takip', DRIVE_BACKUPS = 'Yedekler', DRIVE_FILE = 'is-takip-data.json', DRIVE_KEEP = 30;
 var drive = {
-  on:false, busy:false, connecting:false, needsLogin:false, again:false,
+  on:false, busy:false, connecting:false, needsLogin:false, again:false, retried:false, loginReason:'',
   err:'', info:'', working:'', choice:null, setup:false, picker:null,
   token:null, exp:0, tokenP:null, gisP:null,
   folderId:null, backupsId:null, fileId:null, md5:null, revId:null,
@@ -1331,8 +1331,15 @@ function driveChoose(what){
 function driveReconnect(){
   if(!drive.on) return driveConnect();
   drive.connecting = true; drive.err = ''; updateBar();
-  return driveToken(true).then(function(){ drive.needsLogin = false; return driveSave(); })
-    .catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
+  return driveToken(true).then(function(){
+    drive.needsLogin = false; drive.loginReason = '';
+    /* Drive'da dosya varsa ve burada kaydedilmemiş bir şey yoksa önce onu oku. */
+    return driveEnsure().then(function(){
+      if(drive.fileId && !driveDirty() && !dirty) return driveLoadRemote();
+      drive.on = true;
+      return driveSave();
+    });
+  }).catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
 }
 function driveDisconnect(){
   clearTimeout(drive.timer);
@@ -1371,7 +1378,14 @@ function driveInit(){
     return driveLoadRemote();
   }).catch(function(e){
     drive.on = false; drive.needsLogin = true;
+    drive.loginReason = errMsg(e);
     if(!e.auth) drive.err = 'Drive bağlantısı kurulamadı: ' + errMsg(e);
+    /* Sessiz giriş ilk denemede sık sık boşa çıkar (Google betiği ya da
+       oturum henüz hazır değildir): bir kez daha dene. */
+    if(!drive.retried){
+      drive.retried = true;
+      setTimeout(function(){ if(drive.needsLogin && !drive.on) driveInit(); }, 2000);
+    }
   }).then(function(){ drive.connecting = false; updateBar(); });
 }
 /* ---------------------------------------------------------- 4. İŞ MANTIĞI */
@@ -1816,11 +1830,23 @@ function driveBarParts(){
   else if(drive.choice && drive.choice.type === 'conflict'){ cls += ' warn'; msg = '⚠ Drive\'daki dosya başka bir cihazdan değişmiş. Üzerine yazmadan önce seçin (eski hali Yedekler\'e kopyalandı).'; }
   else if(drive.working){ cls += ' warn'; msg = '☁ ' + drive.working; }
   else if(drive.connecting){ cls += ' warn'; msg = '☁ Google Drive\'a bağlanılıyor…'; }
-  else if(drive.needsLogin){ cls += ' warn'; msg = '☁ Drive bağlantısı için yeniden giriş gerekli.'; }
+  else if(drive.needsLogin){
+    cls += ' warn';
+    msg = '☁ Drive bağlantısı için yeniden giriş gerekli — düğmeye bir kez basmanız yeterli; verileriniz bu arada bu cihazda saklanıyor.' +
+      (drive.loginReason ? ' (Sebep: ' + drive.loginReason + ')' : '');
+  }
   else if(drive.on && drive.busy){ cls += ' warn'; msg = '● Drive\'a yazılıyor…'; }
   else if(drive.on && driveDirty()){ cls += ' warn'; msg = '● Değişiklikler birazdan Drive\'a yazılacak…'; }
   else if(drive.on && drive.info){ cls += ' ok'; msg = drive.info; }
   else if(drive.on){ cls += ' ok'; msg = '✓ Veriler Google Drive › ' + DRIVE_FOLDER + ' klasörüne otomatik kaydediliyor. Günlük yedekler Yedekler klasöründe.'; }
+  else if(driveFlag() && !driveClientId()){
+    cls += ' warn';
+    msg = '⚠ Drive bağlantısı açık görünüyor ama bu adreste Google istemci kimliği kayıtlı değil. Tarayıcı ayarları her adres için ayrı saklanır: sayfayı daha önce kullandığınız adresten açtığınızdan emin olun (şu an: ' +
+      (location.origin && location.origin !== 'null' ? location.origin : 'dosyadan açıldı — Drive bu şekilde çalışmaz') + '). Kimliği "⚙ Drive ayarı" ile yeniden girebilirsiniz.';
+  }
+  else if(location.protocol === 'file:'){
+    msg = 'Google Drive yalnızca sayfa bir web adresinden (http/https) açıldığında çalışır; bu sayfa dosyadan açılmış.';
+  }
   else { msg = 'Veriler henüz Google Drive\'a bağlı değil.'; }
 
   if(drive.choice){
@@ -3683,10 +3709,17 @@ applyTheme();
 render();
 updateBar();
 
-/* Sıra önemli: önce bu cihazdaki kopya (anında açılış ve çökme sigortası),
-   sonra bağlı dosya / Drive. Bağlı kaynak veriyi devralırken, kaydedilmemiş
-   yerel değişiklik varsa üzerine yazmaz, kullanıcıya sorar. */
-loadSnapshot().then(function(snap){
+/* Drive kullanılıyorsa Google giriş betiğini hemen yüklemeye başla:
+   otomatik bağlantı, yerel kopyanın okunmasını beklemesin. */
+if(driveFlag() && driveClientId()) loadGis().catch(function(){});
+
+/* Önce bu cihazdaki kopya (anında açılış ve çökme sigortası), sonra bağlı
+   dosya / Drive. IndexedDB yavaşlar ya da engellenirse açılış takılmasın
+   diye okuma en fazla 2,5 saniye bekletilir. */
+Promise.race([
+  loadSnapshot().catch(function(){ return null; }),
+  new Promise(function(res){ setTimeout(function(){ res(null); }, 2500); })
+]).then(function(snap){
   if(snap && !isEmptyState(snap.data) && isEmptyState(state)){
     state = snap.data;
     dirty = !!snap.dirty;
@@ -3695,11 +3728,9 @@ loadSnapshot().then(function(snap){
   }
 }).catch(function(){}).then(function(){
   booted = true;
-  return initFileHandle();
-}).then(function(){
-  driveInit();
-}).catch(function(e){
-  updateBar();
+  /* İkisi birbirinden bağımsız başlar: biri hata verse de diğeri çalışır. */
+  try { driveInit(); } catch(e){ drive.err = 'Drive başlatılamadı: ' + errMsg(e); updateBar(); }
+  try { initFileHandle(); } catch(e){ updateBar(); }
 });
 })();
 </script>
