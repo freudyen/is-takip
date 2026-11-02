@@ -343,6 +343,11 @@
   .qnote{display:flex;flex-direction:column;gap:6px}
   .qnote textarea{width:100%;min-height:72px}
   .qnote .hintx{font-size:12px;color:var(--muted)}
+  /* 24 saatlik tarih + saat girişi */
+  .dtpick{display:inline-flex;gap:6px;align-items:center;flex:0 0 auto;max-width:100%}
+  .dtpick input[type=date]{flex:1 1 auto;width:auto;min-width:0}
+  .dtpick input.tm[type=text]{flex:0 0 72px;width:72px;min-width:0;text-align:center;padding:8px 6px}
+  .mfield .dtpick{display:flex;width:100%}
   /* Yazdırma */
   #printSheet{display:none}
   .psheet h2{color:var(--text)}
@@ -506,6 +511,15 @@ function localInputValue(ts){
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 function parseWhen(v){ var t = v ? new Date(v).getTime() : NaN; return isNaN(t) ? null : t; }
+/* Saat metni → "SS:DD" (24 saat). '9', '930', '09:30', '9.30', '17,45' kabul edilir. */
+function normTime(s){
+  s = str(s).trim().replace(/[.,\s]/g, ':');
+  var m = s.match(/^(\d{1,2})(?::?(\d{2}))?$/);
+  if(!m) return null;
+  var h = +m[1], mi = m[2] ? +m[2] : 0;
+  if(h > 23 || mi > 59) return null;
+  return pad(h) + ':' + pad(mi);
+}
 
 /* Son tarih etiketi: bugüne göre okunabilir metin + durum sınıfı */
 function dueInfo(due, done){
@@ -564,6 +578,30 @@ function el(tag, props, children){
   return n;
 }
 function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); return node; }
+
+/* 24 saatlik tarih + saat girişi. Tarayıcının datetime-local kutusu dil
+   ayarına göre AM/PM gösterebildiği için tarih kutusu + "SS:DD" metin alanı
+   kullanılır. Dış öğe datetime-local gibi davranır: .value "YYYY-MM-DDTHH:MM"
+   okur/yazar (eksik/geçersizse ''), .focus() tarih kutusuna gider;
+   input/change/keydown olayları iç kutulardan dışarı kabarcıklanır. */
+function dtInput(props){
+  props = Object.assign({}, props);
+  var label = props['aria-label'] || 'Zaman';
+  props['class'] = 'dtpick' + (props['class'] ? ' ' + props['class'] : '');
+  props.role = 'group';
+  props['aria-label'] = label;
+  var d = el('input', { type:'date', 'aria-label': label + ' (tarih)' });
+  var t = el('input', { type:'text', 'class':'tm', inputmode:'numeric', maxlength:'5', autocomplete:'off', placeholder:'SS:DD',
+    'aria-label': label + ' (saat, 24 saat)', title:'24 saat biçiminde, örn. 09:30 ya da 17:45' });
+  t.addEventListener('blur', function(){ var n = normTime(t.value); if(n) t.value = n; });
+  var w = el('span', props, [d, t]);
+  Object.defineProperty(w, 'value', {
+    get: function(){ var n = normTime(t.value); return (d.value && n) ? d.value + 'T' + n : ''; },
+    set: function(v){ var a = str(v).split('T'); d.value = a[0] || ''; t.value = normTime((a[1] || '').slice(0, 5)) || ''; }
+  });
+  w.focus = function(){ d.focus(); };
+  return w;
+}
 
 function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
 function lsSet(k, v){ try { if(v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch(e){} }
@@ -2307,11 +2345,11 @@ function renderAlarmBar(){
       el('button', { type:'button', class:'small', text:'1 sa', title:'1 saat ertele', onclick:function(){ snoozeAlarm(a.id, 60); } }),
       el('button', { type:'button', class:'small', text:'⏱ Ertele…', onclick:function(){
         snoozeId = a.id; snoozeVal = defaultAlarmValue(60); snoozeErr = ''; renderAlarmBar();
-        var i = document.querySelector('#alarmBar input[type=datetime-local]'); if(i) i.focus();
+        var i = document.querySelector('#alarmBar .dtpick'); if(i) i.focus();
       } })
     ]) ];
     if(snoozeId === a.id){
-      var inp = el('input', { type:'datetime-local', 'aria-label':'Yeni hatırlatma zamanı' });
+      var inp = dtInput({ 'aria-label':'Yeni hatırlatma zamanı' });
       inp.value = snoozeVal;
       inp.addEventListener('input', function(){ snoozeVal = inp.value; });
       inp.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ e.preventDefault(); snoozeId = null; renderAlarmBar(); } });
@@ -2410,7 +2448,7 @@ function dateBtn(it, timeOnly){
     text:'🕒 ' + (timeOnly ? fmtTime(it.doneAt) : fmt(it.doneAt)), onclick:function(){ startEdit('d:' + it.id); } });
 }
 function dateForm(it){
-  var inp = el('input', { type:'datetime-local', 'data-edit':'1', 'aria-label':'Tamamlanma tarihi' });
+  var inp = dtInput({ 'data-edit':'1', 'aria-label':'Tamamlanma tarihi' });
   inp.value = localInputValue(it.doneAt || Date.now());
   inp.addEventListener('keydown', escCancel);
   var err = el('span', { class:'err' });
@@ -2490,7 +2528,7 @@ function itemMenu(p, t, it){
 }
 /* madde için hatırlatıcı kurma formu */
 function alarmForItem(p, t, it){
-  var when = el('input', { type:'datetime-local', 'data-edit':'1', 'aria-label':'Hatırlatma zamanı' });
+  var when = dtInput({ 'data-edit':'1', 'aria-label':'Hatırlatma zamanı' });
   when.value = isDayKey(it.due) ? (it.due + 'T09:00') : defaultAlarmValue(60);
   var txt = el('input', { type:'text', maxlength:'300', autocomplete:'off', 'aria-label':'Hatırlatma notu' });
   txt.value = it.text;
@@ -3127,7 +3165,7 @@ function manualForm(){
   fillTasks();
 
   var text = el('input', { type:'text', maxlength:'200', autocomplete:'off', placeholder:'Yapılan işi yazın…' });
-  var when = el('input', { type:'datetime-local' });
+  var when = dtInput({ 'aria-label':'Tarih ve saat' });
   when.value = manual.when || localInputValue(Date.now());      /* girilen tarih korunur */
   when.addEventListener('change', function(){ manual.when = when.value; });
   var dur = el('input', { type:'text', maxlength:'40', autocomplete:'off', placeholder:'örn. 2 saat, 90 dk, 1:30 (isteğe bağlı)' });
@@ -3495,7 +3533,7 @@ function renderAlarms(){
   var root = clear(document.getElementById('alarmView'));
   lastRenderedAlarmKey = dueAlarms().map(function(a){ return a.id + ':' + a.at; }).join('|');
   var text = el('input', { type:'text', maxlength:'300', autocomplete:'off', placeholder:'Neyi hatırlatayım? (örn. Müşteriyi ara)', 'aria-label':'Hatırlatma notu', 'data-key':'alarm' });
-  var when = el('input', { type:'datetime-local', 'aria-label':'Hatırlatma zamanı' });
+  var when = dtInput({ 'aria-label':'Hatırlatma zamanı' });
   when.value = defaultAlarmValue(60);
   var err = el('span', { class:'err' });
 
@@ -3536,7 +3574,7 @@ function renderAlarms(){
       if(editKey === 'a:' + a.id){
         var et = el('input', { type:'text', maxlength:'300', autocomplete:'off', 'data-edit':'1', 'aria-label':'Not' });
         et.value = a.text;
-        var ew = el('input', { type:'datetime-local', 'aria-label':'Zaman' });
+        var ew = dtInput({ 'aria-label':'Zaman' });
         ew.value = localInputValue(a.at);
         var eerr = el('span', { class:'err' });
         [et, ew].forEach(function(i){ i.addEventListener('keydown', escCancel); });
