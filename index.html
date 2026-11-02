@@ -284,6 +284,65 @@
   /* Arşiv & çöp */
   .arcrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .arcrow .what{flex:1 1 220px;word-break:break-word}
+  /* Geniş ekran: sol menü + içerik + "Bugün" paneli (dar ekranda yan sütunlar gizli) */
+  .side{display:none}
+  @media (min-width:1500px){
+    .shell{display:grid;grid-template-columns:230px minmax(0,1150px) 270px;gap:24px;justify-content:center;align-items:start;padding:0 16px}
+    .shell > .wrap{max-width:none;margin:0;padding:24px 0 64px;min-width:0}
+    .side{display:flex;flex-direction:column;gap:14px;position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:24px 2px}
+    .wrap > header,#savebar,#tabs{display:none!important}
+  }
+  .sbrand{font-size:20px;font-weight:700;padding:2px 10px 4px}
+  .snav{display:flex;flex-direction:column;gap:2px}
+  .snavbtn{display:flex;align-items:center;gap:8px;border:0;border-radius:8px;background:none;text-align:left;padding:9px 10px;font-weight:600;color:var(--muted)}
+  .snavbtn:hover{background:var(--card)}
+  .snavbtn.on{background:var(--card);color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+  .snavbtn .nm{flex:1}
+  .sbadge{font-size:11px;font-weight:700;background:var(--alarm-bg);color:var(--warn);border-radius:10px;padding:1px 7px}
+  .skey{font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 5px}
+  .sstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(62px,1fr));gap:6px}
+  .sstat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+  .sstat .v{font-size:18px;font-weight:700;line-height:1.2}
+  .sstat .l{font-size:11px;color:var(--muted)}
+  .sstat.alert .v{color:var(--danger)}
+  .ssave{background:var(--card);border:1px solid var(--line);border-radius:10px;font-size:13px}
+  .ssave.ok{border-color:var(--ok)} .ssave.warn{border-color:var(--warn)} .ssave.err{border-color:var(--danger)}
+  .sshead{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;text-align:left;padding:8px 10px;font-weight:600}
+  .ssave.ok .sshead{color:var(--ok)} .ssave.warn .sshead{color:var(--warn)} .ssave.err .sshead{color:var(--danger)}
+  .sshead .nm{flex:1}
+  .ssbody{display:flex;flex-direction:column;gap:6px;padding:0 10px 10px}
+  .ssbody .ssmsg{color:var(--muted);font-size:12px}
+  .ssbody > button{width:100%;text-align:left}
+  .ssbody select{width:100%}
+  .sthemebtn{align-self:flex-start}
+  .tdcol{display:flex;flex-direction:column;gap:12px}
+  .tdcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .tdtitle{font-size:18px;font-weight:700}
+  .tdsub{font-size:13px;color:var(--muted)}
+  .tdsec{margin-top:10px}
+  .tdsec h4{margin:0 0 2px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .tdsec.over h4{color:var(--danger)}
+  .tdrow{display:flex;gap:8px;align-items:baseline;width:100%;border:0;background:none;text-align:left;padding:5px 4px;border-radius:6px;font-size:13px;min-height:0}
+  .tdrow:hover{background:var(--sub)}
+  .tdrow .tm{flex:0 0 auto;font-weight:600;color:var(--accent);font-size:12px}
+  .tdrow .tx{flex:1;min-width:0;word-break:break-word}
+  .tdrow .tl{flex:0 0 auto;font-size:11px;color:var(--muted)}
+  .tdsec.over .tl{color:var(--danger)}
+  .tdok{font-size:13px;color:var(--ok);margin-top:10px}
+  .mchead{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .mchead .t{flex:1;text-align:center;font-weight:600;font-size:13px}
+  .mchead button{min-height:28px;padding:2px 9px}
+  .mcal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;text-align:center}
+  .mcal .dw{font-size:11px;color:var(--muted);padding:2px 0}
+  .mcal button{position:relative;min-height:30px;padding:2px 0;font-size:12px;border:0;border-radius:6px;background:none}
+  .mcal button:hover{background:var(--sub)}
+  .mcal button.today{background:var(--accent);color:var(--accent-text);font-weight:700}
+  .mcal button.has::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--warn)}
+  .mcal button.over::after{background:var(--danger)}
+  .mcal button.today::after{background:var(--accent-text)}
+  .qnote{display:flex;flex-direction:column;gap:6px}
+  .qnote textarea{width:100%;min-height:72px}
+  .qnote .hintx{font-size:12px;color:var(--muted)}
   /* Yazdırma */
   #printSheet{display:none}
   .psheet h2{color:var(--text)}
@@ -296,6 +355,8 @@
     #printSheet table{font-size:12px}
     #printSheet th,#printSheet td{border:1px solid #999;padding:4px 6px}
     #printSheet .pbrk{page-break-inside:avoid}
+    .side{display:none!important}
+    .shell{display:block!important;padding:0!important}
   }
   @media (prefers-reduced-motion: reduce){
     .flash{animation:none;box-shadow:0 0 0 3px var(--accent)}
@@ -303,6 +364,14 @@
 </style>
 </head>
 <body>
+<div class="shell">
+<aside class="side" id="sideLeft" aria-label="Gezinme ve kayıt durumu">
+  <div class="sbrand">📋 İş Takip</div>
+  <nav class="snav" id="sideNav" aria-label="Bölümler"></nav>
+  <div class="sstats" id="sideStats"></div>
+  <div class="ssave" id="sideSave"></div>
+  <button type="button" id="themeBtn2" class="small sthemebtn" title="Görünüm: otomatik / açık / koyu">🌓 Otomatik</button>
+</aside>
 <div class="wrap">
   <div class="alarmbar" id="alarmBar"></div>
   <div aria-live="assertive" class="srdesc" id="srLive"></div>
@@ -364,6 +433,8 @@
 
   <p class="hint">Veriler bağımsız bir <code>.json</code> dosyasında saklanır; bu cihazda ayrıca otomatik bir yerel kopya tutulur.</p>
   <div id="printSheet" class="psheet" aria-hidden="true"></div>
+</div>
+<aside class="side" id="sideRight" aria-label="Bugün"><div id="todayView" class="tdcol"></div></aside>
 </div>
 <div class="toasts" id="toasts"></div>
 <script>
@@ -971,7 +1042,7 @@ function initFileHandle(){
   if(!hasFS || driveFlag()){ updateBar(); return Promise.resolve(); }
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
   var autoAsk = function(e){
-    if(needsPermission && !(e.target.closest && e.target.closest('#savebar'))) enablePermission();
+    if(needsPermission && !(e.target.closest && e.target.closest('#savebar, #sideSave'))) enablePermission();
     if(canWrite) document.removeEventListener('click', autoAsk, true);
   };
   document.addEventListener('click', autoAsk, true);
@@ -1984,42 +2055,211 @@ function drivePickerBox(){
     el('button', { type:'button', class:'small', text:'Kapat', onclick:function(){ drive.picker = null; updateBar(); } })
   ]);
 }
+/* Kayıt durumu: { cls, msg, short, nodes }. Her çağrı yeni düğmeler üretir;
+   böylece aynı içerik hem üst çubukta hem de geniş ekrandaki yan kartta kullanılır. */
+function barParts(){
+  var nodes = [];
+  var driveMode = drive.on || drive.connecting || drive.needsLogin || !!drive.choice || !!drive.err || driveFlag();
+  var dp = driveBarParts();
+  var cls, msg, short;
+
+  if(driveMode){
+    cls = dp.cls; msg = dp.msg;
+    if(drive.err) short = 'Drive hatası';
+    else if(drive.choice) short = drive.choice.type === 'conflict' ? 'Çakışma: seçim gerekli' : 'Drive: seçim bekliyor';
+    else if(drive.working || drive.connecting) short = 'Drive: işlem sürüyor…';
+    else if(drive.needsLogin) short = 'Drive: giriş gerekli';
+    else if(drive.on && (drive.busy || driveDirty())) short = 'Drive\'a yazılıyor…';
+    else if(drive.on) short = 'Drive\'a kaydedildi';
+    else if(driveFlag() && !driveClientId()) short = 'Drive: ayar eksik';
+    else short = 'Drive bağlı değil';
+    nodes = nodes.concat(dp.btns);
+  } else {
+    cls = 'status';
+    if(saveError){ cls += ' err'; msg = '⚠ ' + saveError; short = 'Kayıt hatası'; }
+    else if(canWrite && !dirty){ cls += ' ok'; msg = '✓ Veriler ' + (jsonHandle && jsonHandle.name ? '"' + jsonHandle.name + '" dosyasına' : 'JSON dosyasına') + ' otomatik kaydediliyor.'; short = 'Dosyaya kaydedildi'; }
+    else if(canWrite && dirty){ cls += ' warn'; msg = '● JSON dosyasına yazılıyor…'; short = 'Dosyaya yazılıyor…'; }
+    else if(dirty){ cls += ' warn'; msg = '● Değişiklikler bu cihazda saklandı; kalıcı kayıt için dosyaya ya da Drive\'a bağlanın.'; short = 'Yalnızca bu cihazda'; }
+    else if(needsPermission){ cls += ' warn'; msg = 'Hatırlanan ' + (jsonHandle ? 'dosya: "' + (jsonHandle.name || 'JSON') + '"' : 'klasör: "' + (folderHandle && folderHandle.name || '') + '"') + ' — sayfada herhangi bir yere tıklayınca izin istenecek.'; short = 'Kayıt izni gerekli'; }
+    else if(!hasFS){ msg = 'Bu tarayıcı yerel dosyaya yazmayı desteklemiyor; veriler bu cihazda saklanıyor. Kalıcı kayıt için Google Drive\'a bağlanın.'; short = 'Yalnızca bu cihazda'; }
+    else { msg = 'Veriler bu cihazda saklanıyor. Kalıcı kayıt için Drive\'a, bir dosyaya ya da klasöre bağlanın.'; short = 'Yalnızca bu cihazda'; }
+
+    nodes = nodes.concat(dp.btns);
+    if(hasFS && !canWrite && !needsPermission){
+      nodes.push(el('button', { class:'small', text:'📄 Yeni JSON Oluştur', onclick: createNewJsonFile }));
+      nodes.push(el('button', { class:'small', text:'🔗 Varolan JSON\'a Bağlan', onclick: connectExistingJsonFile }));
+      nodes.push(el('button', { class:'small', text:'📁 Klasöre Bağlan (' + AUTO_NAME + ' otomatik)', title:'Bu HTML dosyasının bulunduğu klasörü seçin; içindeki ' + AUTO_NAME + ' her açılışta kendiliğinden bağlanır', onclick: connectFolder }));
+    }
+    if(needsPermission){
+      nodes.push(el('button', { class:'primary small', text:'🔓 Otomatik Kaydı Etkinleştir', onclick: enablePermission }));
+    }
+  }
+  nodes.push(el('button', { class:'small', text:'📥 JSON İçe Aktar (Yükle)', onclick: importJsonFile }));
+  nodes.push(el('button', { class:'small', text:'📤 JSON Dışa Aktar (Yedek)', onclick: downloadBackup }));
+  if(drive.setup && !drive.on) nodes.push(driveSetupBox());
+  if(drive.picker) nodes.push(drivePickerBox());
+  return { cls: cls, msg: msg, short: short, nodes: nodes };
+}
 function updateBar(){
   var bar = document.getElementById('savebar');
   if(!bar) return;
+  if(isWide()){ clear(bar); renderSideSave(); return; }
+  var p = barParts();
   clear(bar);
-  var driveMode = drive.on || drive.connecting || drive.needsLogin || !!drive.choice || !!drive.err || driveFlag();
-  var dp = driveBarParts();
+  bar.appendChild(el('span', { class: p.cls, text: p.msg }));
+  p.nodes.forEach(function(n){ bar.appendChild(n); });
+}
 
-  if(driveMode){
-    bar.appendChild(el('span', { class: dp.cls, text: dp.msg }));
-    dp.btns.forEach(function(b){ bar.appendChild(b); });
-  } else {
-    var cls = 'status', msg;
-    if(saveError){ cls += ' err'; msg = '⚠ ' + saveError; }
-    else if(canWrite && !dirty){ cls += ' ok'; msg = '✓ Veriler ' + (jsonHandle && jsonHandle.name ? '"' + jsonHandle.name + '" dosyasına' : 'JSON dosyasına') + ' otomatik kaydediliyor.'; }
-    else if(canWrite && dirty){ cls += ' warn'; msg = '● JSON dosyasına yazılıyor…'; }
-    else if(dirty){ cls += ' warn'; msg = '● Değişiklikler bu cihazda saklandı; kalıcı kayıt için dosyaya ya da Drive\'a bağlanın.'; }
-    else if(needsPermission){ msg = 'Hatırlanan ' + (jsonHandle ? 'dosya: "' + (jsonHandle.name || 'JSON') + '"' : 'klasör: "' + (folderHandle && folderHandle.name || '') + '"') + ' — sayfada herhangi bir yere tıklayınca izin istenecek.'; }
-    else if(!hasFS){ msg = 'Bu tarayıcı yerel dosyaya yazmayı desteklemiyor; veriler bu cihazda saklanıyor. Kalıcı kayıt için Google Drive\'a bağlanın.'; }
-    else { msg = 'Veriler bu cihazda saklanıyor. Kalıcı kayıt için Drive\'a, bir dosyaya ya da klasöre bağlanın.'; }
+/* --- geniş ekran yan sütunları ------------------------------------------ */
+var wideMQ = window.matchMedia ? window.matchMedia('(min-width:1500px)') : null;
+function isWide(){ return !!(wideMQ && wideMQ.matches); }
 
-    bar.appendChild(el('span', { class: cls, text: msg }));
-    dp.btns.forEach(function(b){ bar.appendChild(b); });
-
-    if(hasFS && !canWrite && !needsPermission){
-      bar.appendChild(el('button', { class:'small', text:'📄 Yeni JSON Oluştur', onclick: createNewJsonFile }));
-      bar.appendChild(el('button', { class:'small', text:'🔗 Varolan JSON\'a Bağlan', onclick: connectExistingJsonFile }));
-      bar.appendChild(el('button', { class:'small', text:'📁 Klasöre Bağlan (' + AUTO_NAME + ' otomatik)', title:'Bu HTML dosyasının bulunduğu klasörü seçin; içindeki ' + AUTO_NAME + ' her açılışta kendiliğinden bağlanır', onclick: connectFolder }));
-    }
-    if(needsPermission){
-      bar.appendChild(el('button', { class:'primary small', text:'🔓 Otomatik Kaydı Etkinleştir', onclick: enablePermission }));
-    }
+/* Sol sütundaki kayıt kartı: kısa durum + açılır işlemler. Kullanıcının
+   müdahalesi gereken bir durum çıkınca kendiliğinden açılır. */
+var sideSaveOpen = false, sideSaveAttn = false;
+function renderSideSave(){
+  var box = document.getElementById('sideSave');
+  if(!box) return;
+  var p = barParts();
+  var attn = !!(drive.err || drive.choice || drive.needsLogin || drive.setup || drive.picker || saveError || needsPermission);
+  if(attn && !sideSaveAttn) sideSaveOpen = true;
+  sideSaveAttn = attn;
+  var st = p.cls.indexOf('err') >= 0 ? 'err' : p.cls.indexOf('warn') >= 0 ? 'warn' : p.cls.indexOf('ok') >= 0 ? 'ok' : '';
+  clear(box);
+  box.className = 'ssave' + (st ? ' ' + st : '');
+  box.appendChild(el('button', { type:'button', class:'sshead', 'aria-expanded': sideSaveOpen ? 'true' : 'false', title: p.msg,
+    onclick:function(){ sideSaveOpen = !sideSaveOpen; renderSideSave(); } }, [
+    el('span', { 'aria-hidden':'true', text: st === 'ok' ? '✓' : st === 'err' ? '⚠' : st === 'warn' ? '●' : '💾' }),
+    el('span', { class:'nm', text: p.short }),
+    el('span', { 'aria-hidden':'true', text: sideSaveOpen ? '▾' : '⋯' })
+  ]));
+  if(sideSaveOpen){
+    box.appendChild(el('div', { class:'ssbody' }, [ el('div', { class:'ssmsg', text: p.msg }) ].concat(p.nodes)));
   }
-  bar.appendChild(el('button', { class:'small', text:'📥 JSON İçe Aktar (Yükle)', onclick: importJsonFile }));
-  bar.appendChild(el('button', { class:'small', text:'📤 JSON Dışa Aktar (Yedek)', onclick: downloadBackup }));
-  if(drive.setup && !drive.on) bar.appendChild(driveSetupBox());
-  if(drive.picker) bar.appendChild(drivePickerBox());
+}
+
+var TAB_LABELS = { tasks:'📋 İşler', cal:'📅 Takvim', dash:'📊 Dashboard', alarm:'⏰ Hatırlatıcı', notebook:'📓 Not Defteri', archive:'🗄 Arşiv', search:'🔍 Ara' };
+function renderSideNav(){
+  var nav = clear(document.getElementById('sideNav'));
+  var due = dueAlarms().length;
+  TABS.forEach(function(k){
+    nav.appendChild(el('button', { type:'button', class:'snavbtn' + (k === tab ? ' on' : ''), 'data-tab': k,
+      'aria-current': k === tab ? 'page' : null, title: k === 'search' ? 'Ara ( / tuşu )' : null,
+      onclick:function(){
+        if(k === 'search'){ openSearch(); return; }
+        switchTab(k);
+        var nb = document.querySelector('#sideNav [data-tab="' + k + '"]'); if(nb) nb.focus();
+      } }, [
+      el('span', { class:'nm', text: TAB_LABELS[k] }),
+      k === 'alarm' && due ? el('span', { class:'sbadge', title: due + ' hatırlatıcının zamanı geldi', text: String(due) }) : null,
+      k === 'search' ? el('span', { class:'skey', text:'/' }) : null
+    ]));
+  });
+}
+
+/* Sağ sütun: "Bugün" paneli */
+var miniY = null, miniM = null, quickNote = '';
+function todayRow(time, text, label, go){
+  return el('button', { type:'button', class:'tdrow', onclick: go }, [
+    time ? el('span', { class:'tm', text: time }) : null,
+    el('span', { class:'tx', text: snip(text, 80) }),
+    label ? el('span', { class:'tl', text: label }) : null
+  ]);
+}
+function goDueItem(x){ goTask(x.it ? x.it.id : x.t.id); }
+function renderToday(){
+  var root = clear(document.getElementById('todayView'));
+  var tk = todayKey(), now = Date.now();
+
+  /* özet kartı: hatırlatıcılar + geciken / bugün biten işler */
+  var card = el('div', { class:'tdcard' }, [
+    el('div', { class:'tdtitle', text:'Bugün' }),
+    el('div', { class:'tdsub', text: fmtDay(tk) })
+  ]);
+  var next = alarmList().filter(function(a){ return a.at > now; }).sort(function(a, b){ return a.at - b.at; }).slice(0, 4);
+  var sec = el('div', { class:'tdsec' }, [ el('h4', { text:'⏰ Sıradaki hatırlatıcılar' }) ]);
+  if(!next.length) sec.appendChild(el('div', { class:'empty', text:'Yaklaşan hatırlatıcı yok.' }));
+  next.forEach(function(a){
+    var k = dayKey(a.at);
+    var when = k === tk ? fmtTime(a.at) : (k === shiftKey(tk, 1) ? 'Yarın ' : fmtDayShort(k) + ' ') + fmtTime(a.at);
+    sec.appendChild(todayRow(when, a.text, null, function(){ switchTab('alarm'); flashEl(findBySid(a.id)); }));
+  });
+  card.appendChild(sec);
+
+  var di = dueItems();
+  var over = di.filter(function(x){ return dayDiff(x.due, tk) < 0; });
+  var today = di.filter(function(x){ return dayDiff(x.due, tk) === 0; });
+  function dueSec(title, list, cls){
+    var s = el('div', { class:'tdsec' + (cls ? ' ' + cls : '') }, [ el('h4', { text: title + ' (' + list.length + ')' }) ]);
+    list.slice(0, 6).forEach(function(x){
+      var d = dueInfo(x.due, false);
+      s.appendChild(todayRow(null, x.text, cls === 'over' ? d.label : x.p.title, function(){ goDueItem(x); }));
+    });
+    if(list.length > 6) s.appendChild(todayRow(null, '… ve ' + (list.length - 6) + ' tane daha', null, function(){ switchTab('tasks'); }));
+    return s;
+  }
+  if(over.length) card.appendChild(dueSec('⚠ Geciken', over, 'over'));
+  if(today.length) card.appendChild(dueSec('📅 Bugün son gün', today, ''));
+  if(!over.length && !today.length) card.appendChild(el('div', { class:'tdok', text:'✓ Geciken ya da bugün biten iş yok.' }));
+  root.appendChild(card);
+
+  /* mini takvim: son tarihli ve hatırlatıcılı günler işaretli */
+  if(miniY === null){ var n0 = new Date(); miniY = n0.getFullYear(); miniM = n0.getMonth(); }
+  var marks = {};
+  di.forEach(function(x){ marks[x.due] = (dayDiff(x.due, tk) < 0) ? 'over' : (marks[x.due] || 'has'); });
+  alarmList().forEach(function(a){ var k = dayKey(a.at); if(!marks[k]) marks[k] = 'has'; });
+  function shiftMonth(d){ miniM += d; if(miniM < 0){ miniM = 11; miniY--; } else if(miniM > 11){ miniM = 0; miniY++; } renderToday(); }
+  var grid = el('div', { class:'mcal' });
+  DOW.forEach(function(w){ grid.appendChild(el('span', { class:'dw', text: w.charAt(0) })); });
+  var first = new Date(miniY, miniM, 1), offs = (first.getDay() + 6) % 7, days = new Date(miniY, miniM + 1, 0).getDate();
+  for(var i = 0; i < offs; i++) grid.appendChild(el('span'));
+  for(var d = 1; d <= days; d++){
+    (function(k, d){
+      var m = marks[k];
+      grid.appendChild(el('button', { type:'button', class:(k === tk ? 'today ' : '') + (m ? 'has' + (m === 'over' ? ' over' : '') : ''),
+        title: fmtDay(k) + (m ? ' • son tarih / hatırlatıcı var' : ''), 'aria-label': fmtDay(k),
+        text: String(d), onclick:function(){ goDay(k); } }));
+    })(miniY + '-' + pad(miniM + 1) + '-' + pad(d), d);
+  }
+  root.appendChild(el('div', { class:'tdcard' }, [
+    el('div', { class:'mchead' }, [
+      el('button', { type:'button', class:'small', text:'‹', 'aria-label':'Önceki ay', onclick:function(){ shiftMonth(-1); } }),
+      el('span', { class:'t', text: MONTHS[miniM] + ' ' + miniY }),
+      el('button', { type:'button', class:'small', text:'›', 'aria-label':'Sonraki ay', onclick:function(){ shiftMonth(1); } })
+    ]),
+    grid
+  ]));
+
+  /* hızlı not → Not Defteri */
+  var ta = el('textarea', { id:'quickNote', rows:'3', maxlength:'20000', placeholder:'Hızlı not…', 'aria-label':'Hızlı not' });
+  ta.value = quickNote;
+  ta.addEventListener('input', function(){ quickNote = ta.value; });
+  function saveQuick(){
+    if(!ta.value.trim()){ ta.focus(); return; }
+    var v = ta.value; quickNote = '';
+    addNote('', v);
+    toast('Not Defteri\'ne eklendi.', { actionLabel:'📓 Aç', action:function(){ switchTab('notebook'); } });
+    var q = document.getElementById('quickNote'); if(q) q.focus();
+  }
+  ta.addEventListener('keydown', function(e){ if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); saveQuick(); } });
+  root.appendChild(el('div', { class:'tdcard' }, [
+    el('form', { class:'qnote', onsubmit:function(e){ e.preventDefault(); saveQuick(); } }, [
+      el('h4', { style:'margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)', text:'📝 Hızlı not' }),
+      ta,
+      el('div', { class:'noteactions' }, [
+        el('button', { type:'submit', class:'small', text:'Not Defteri\'ne ekle' }),
+        el('span', { class:'hintx', text:'Ctrl+Enter' })
+      ])
+    ])
+  ]));
+}
+function renderSides(){
+  if(!isWide()) return;
+  /* hızlı not yazılırken yeniden çizim olursa odak ve imleç korunsun */
+  var a = document.activeElement, keep = a && a.id === 'quickNote' ? [a.selectionStart, a.selectionEnd] : null;
+  renderSideNav();
+  renderToday();
+  if(keep){ var q = document.getElementById('quickNote'); q.focus(); q.setSelectionRange(keep[0], keep[1]); }
 }
 
 /* --- sistem bildirimleri ------------------------------------------------- */
@@ -2098,7 +2338,7 @@ function renderAlarmBar(){
 }
 function alarmTick(){
   var key = dueAlarms().map(function(a){ return a.id + ':' + a.at; }).join('|');
-  if(key !== lastDueKey) renderAlarmBar();
+  if(key !== lastDueKey){ renderAlarmBar(); renderSides(); }
   if(tab === 'alarm' && key !== lastRenderedAlarmKey && !editKey) renderAlarms();
 }
 
@@ -3729,6 +3969,11 @@ function updateStats(){
   }); }); });
   var over = dueItems().filter(function(x){ return dayDiff(x.due, todayKey()) < 0; }).length;
   document.getElementById('stats').textContent = open + ' açık • ' + done + ' tamamlandı' + (over ? ' • ' + over + ' geciken' : '');
+  if(!isWide()) return;
+  var ss = clear(document.getElementById('sideStats'));
+  [ [open, 'açık'], [done, 'tamamlandı'], over ? [over, 'geciken', true] : null ].forEach(function(s){
+    if(s) ss.appendChild(el('div', { class:'sstat' + (s[2] ? ' alert' : '') }, [ el('div', { class:'v', text:String(s[0]) }), el('div', { class:'l', text:s[1] }) ]));
+  });
 }
 var TABS = ['tasks','cal','dash','alarm','notebook','archive','search'];
 function switchTab(t){
@@ -3760,6 +4005,7 @@ function renderInner(focusKey){
   else if(tab === 'search') renderSearch();
   renderAlarmBar();
   renderNotice();
+  renderSides();
 
   var target = null;
   if(editKey){
@@ -3780,17 +4026,29 @@ var THEMES = [ ['auto','🌓 Otomatik'], ['light','☀ Açık'], ['dark','🌙 K
 function applyTheme(){
   var t = lsGet('is-takip-theme') || 'auto';
   document.documentElement.setAttribute('data-theme', t);
-  var b = document.getElementById('themeBtn');
   var found = THEMES.filter(function(x){ return x[0] === t; })[0] || THEMES[0];
-  b.textContent = found[1];
-  b.setAttribute('aria-label', 'Görünüm: ' + found[1].replace(/^\S+\s/, ''));
+  ['themeBtn', 'themeBtn2'].forEach(function(id){
+    var b = document.getElementById(id);
+    b.textContent = found[1];
+    b.setAttribute('aria-label', 'Görünüm: ' + found[1].replace(/^\S+\s/, ''));
+  });
 }
-document.getElementById('themeBtn').addEventListener('click', function(){
+['themeBtn', 'themeBtn2'].forEach(function(id){ document.getElementById(id).addEventListener('click', function(){
   var t = lsGet('is-takip-theme') || 'auto';
   var i = THEMES.findIndex(function(x){ return x[0] === t; });
   lsSet('is-takip-theme', THEMES[(i + 1) % THEMES.length][0]);
   applyTheme();
-});
+}); });
+
+/* pencere genişliği eşiği geçince düzeni yeniden kur */
+if(wideMQ){
+  /* "change" olayı bazı ortamlarda gelmiyor; resize ile de yakalanır, iki kez çizilmez */
+  var lastWide = isWide();
+  var onWide = function(){ if(isWide() === lastWide) return; lastWide = isWide(); render(); updateBar(); };
+  if(wideMQ.addEventListener) wideMQ.addEventListener('change', onWide);
+  else if(wideMQ.addListener) wideMQ.addListener(onWide);
+  window.addEventListener('resize', onWide);
+}
 
 /* sekmeler */
 Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function(b){
