@@ -509,7 +509,8 @@
   }
 
   /* pano */
-  .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-top:18px}
+  /* sütunlar en uzun sütun kadar uzar: kart sütunun boş alt kısmına da bırakılabilir */
+  .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:stretch;margin-top:18px}
   .proj.board-head{margin-bottom:0}
   @media (max-width:900px){ .board{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media (max-width:560px){ .board{grid-template-columns:1fr} .bcol{min-height:0} }
@@ -3082,14 +3083,16 @@ function menu(parts){
   var det = el('details', { class:'rowmenu' }, [
     el('summary', { title:'İşlemler', 'aria-label':'İşlemler', text:'⋯' }), box
   ]);
-  /* dar ekranda menüyü görünür alanın içinde tut */
+  /* menüyü görünür alanın içinde tut: yanlara taşarsa kaydır, altta yer yoksa yukarı aç */
   det.addEventListener('toggle', function(){
-    box.style.left = ''; box.style.right = '';
+    box.style.left = ''; box.style.right = ''; box.style.top = ''; box.style.bottom = '';
     if(!det.open) return;
     var r = box.getBoundingClientRect();
     if(r.left < 8) { box.style.left = '0'; box.style.right = 'auto'; }
     var r2 = box.getBoundingClientRect();
     if(r2.right > window.innerWidth - 8){ box.style.left = 'auto'; box.style.right = '0'; }
+    var r3 = box.getBoundingClientRect(), above = det.getBoundingClientRect().top;
+    if(r3.bottom > window.innerHeight - 8 && above > r3.height + 8){ box.style.top = 'auto'; box.style.bottom = 'calc(100% + 4px)'; }
   });
   return det;
 }
