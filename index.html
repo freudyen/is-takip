@@ -390,6 +390,7 @@
   /* uyarı şeridi */
   .alarm{border:0;border-radius:10px;background:var(--warn-bg);padding:8px 12px;box-shadow:var(--shadow-s)}
   .alarm .arow > .i{color:var(--warn)}
+  .alarm.alarm-all{background:var(--card);border:1px solid var(--warn)}
 
   /* İşler: araç çubuğu */
   .tasksbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;font-size:13px;color:var(--muted)}
@@ -1695,6 +1696,44 @@ function drivePush(parentId){
   }).then(function(){ afterSynced(json); });
 }
 /* Drive'daki dosya bizim son bildiğimizden farklı: bu cihazdakiyle birleştir */
+/* Ortak ata yokken kullanılacak sanal ata. Drive esas alınır; bu cihazdaki
+   kayıtlardan yalnızca Drive'ın son güncellemesinden (T) SONRA eklenenler (atada
+   yok → yeni sayılır) ve sonra değiştirilenler (tamamlanma / düzenleme zamanı T'den
+   yeni → atada Drive'daki hali, böylece buradaki değişiklik kazanır) korunur. T'den
+   eski olup Drive'da bulunmayan kayıtlar atada var sayılır, yani başka cihazda
+   silinmiş kabul edilir: eski bir kopyadan "hortlak" kayıt geri gelmez. */
+function syntheticBase(local, remote, T){
+  var rIdx = {};
+  (function walk(v){
+    if(Array.isArray(v)) v.forEach(walk);
+    else if(isPlain(v)){ if(typeof v.id === 'string') rIdx[v.id] = v; Object.keys(v).forEach(function(k){ walk(v[k]); }); }
+  })(remote);
+  function build(v){
+    if(Array.isArray(v)){
+      var out = [];
+      v.forEach(function(x){
+        if(isPlain(x) && typeof x.id === 'string'){
+          var created = num(x.createdAt, 0) || (x.data && typeof x.at === 'number' ? x.at : 0);   /* çöp kaydında "at" */
+          if(created > T) return;
+          var touched = Math.max(num(x.updatedAt, 0), num(x.doneAt, 0));
+          if(touched > T && rIdx[x.id]){ out.push(rIdx[x.id]); return; }
+        }
+        out.push(build(x));
+      });
+      return out;
+    }
+    if(isPlain(v)){ var o = {}; Object.keys(v).forEach(function(k){ o[k] = build(v[k]); }); return o; }
+    return v;
+  }
+  return build(local);
+}
+function countIds(v, acc){
+  acc = acc || [];
+  if(Array.isArray(v)) v.forEach(function(x){ countIds(x, acc); });
+  else if(isPlain(v)){ if(typeof v.id === 'string') acc.push(v.id); Object.keys(v).forEach(function(k){ if(k !== 'data') countIds(v[k], acc); }); }
+  return acc;
+}
+function idSet(v){ var s = {}; countIds(v).forEach(function(id){ s[id] = true; }); return s; }
 function driveIntegrate(txt, meta){
   var parsed;
   try { parsed = JSON.parse(txt); } catch(e){ parsed = null; }
@@ -1707,11 +1746,17 @@ function driveIntegrate(txt, meta){
 
   /* ortak ata: Drive sürümünün kendisi ya da dayandığı sürüm bizde kayıtlıysa o
      (eski sürüm bir uygulama dosyayı değiştirdiyse damga eskide kalır, yine doğru ata olur),
-     yoksa bizim son eşitlediğimiz sürüm; hiç yoksa (ilk bağlantı) atasız birleştirme. */
+     yoksa bizim son eşitlediğimiz sürüm. Hiç yoksa (bu cihaz Drive ile hiç eşitlenmemiş,
+     ör. uzun süredir açılmamış bir tarayıcıdaki eski kopya) Drive esas alınır: bkz. syntheticBase. */
   var anc = histFind(sy.id) || histFind(sy.parent) || histTop();
   var ctx = { conflicts:0, prefer: num(lsGet('is-takip-localat'), 0) >= num(sy.at, 0) ? 'local' : 'remote' };
-  var merged = normalize(merge3(anc ? JSON.parse(anc.json) : undefined, state, remote, ctx));
+  var T = num(sy.at, 0) || Date.parse(meta.modifiedTime || '') || Date.now();
+  var base = anc ? JSON.parse(anc.json) : syntheticBase(state, remote, T);
+  var merged = normalize(merge3(base, state, remote, ctx));
   var mjson = canon(merged);
+  /* atasız eşitlemede bu cihazdan alınmayan (Drive'da silinmiş / eski) kayıt sayısı */
+  var mIds = anc ? null : idSet(merged);
+  var dropped = anc ? 0 : countIds(state).filter(function(id){ return !mIds[id]; }).length;
 
   return histAdd(rid, meta.headRevisionId, rjson).then(function(){
     if(mjson === ljson){                 /* Drive'dakilerin hepsi zaten burada */
@@ -1727,6 +1772,10 @@ function driveIntegrate(txt, meta){
       return;
     }
     applyState(merged);
+    if(dropped){
+      toast('Bu cihazdaki eski kopya Drive\'dakiyle eşitlendi. Drive\'da artık bulunmayan ' + dropped + ' eski kayıt (başka cihazda silinmiş ya da onaylanmış) geri getirilmedi.',
+        { ms:15000, actionLabel:'↩ Bu cihazdakini kullan', action:function(){ state = normalize(JSON.parse(ljson)); changed(); render(); } });
+    }
     /* aynı alan iki cihazda farklı değiştiyse kullanıcıya söyle; bu cihazdaki hal tek tıkla geri gelir */
     function conflictToast(backedUp){
       toast('Diğer cihazdaki değişikliklerle birleştirildi. ' + ctx.conflicts + ' yerde aynı bilgi iki cihazda farklı değiştirilmişti; daha yeni olan alındı' +
@@ -1916,7 +1965,7 @@ function driveChoose(what){
   drive.err = ''; drive.connecting = true; drive.choice = null; updateBar();
   var p;
   if(what === 'cancel'){ drive.connecting = false; p = Promise.resolve(); }
-  else if(what === 'merge') p = driveStart();                         /* atasız birleştirme: iki taraftaki her kayıt korunur */
+  else if(what === 'merge') p = driveStart();                         /* atasız birleştirme: Drive esas, buradaki yeniler korunur */
   else if(what === 'remote'){
     var mine = canon(state);
     p = driveRead().then(function(txt){
@@ -2373,6 +2422,19 @@ function ackAlarm(id){
   if(snoozeId === id) snoozeId = null;
   commit();
 }
+/* zamanı gelmiş / geçmiş hatırlatıcıların hepsini tek seferde onayla (geri alınabilir) */
+function ackAllDue(){
+  var due = dueAlarms();
+  if(!due.length) return;
+  var ids = {}, removed = due.map(function(a){ ids[a.id] = true; closeNotice(a.id); return clone(a); });
+  state.alarms = alarmList().filter(function(a){ return !ids[a.id]; });
+  snoozeId = null;
+  commit();
+  toast(removed.length + ' hatırlatıcı onaylandı.', { actionLabel:'↩ Geri al', action:function(){
+    removed.forEach(function(a){ if(!alarmList().some(function(x){ return x.id === a.id; })) state.alarms.push(a); });
+    commit();
+  } });
+}
 function deleteAlarm(id){
   var i = alarmList().findIndex(function(x){ return x.id === id; });
   if(i < 0) return;
@@ -2456,7 +2518,7 @@ function driveBarParts(){
   function B(t, fn, primary, dis){ var b = el('button', { class:(primary ? 'primary ' : '') + 'small', text:t, onclick:fn }); if(dis) b.disabled = true; btns.push(b); }
   if(drive.err){ cls += ' err'; msg = '⚠ ' + drive.err; }
   else if(drive.choice){ cls += ' warn'; msg = drive.choice.remoteOk
-    ? 'Hem bu cihazda hem Drive\'da farklı veriler var. Birleştirmek önerilir: iki taraftaki bütün projeler, işler ve kayıtlar korunur.'
+    ? 'Hem bu cihazda hem Drive\'da farklı veriler var. Birleştirmek önerilir: Drive\'daki veriler esas alınır, bu cihazda Drive\'ın son güncellemesinden sonra eklenen ya da değiştirilenler de korunur.'
     : '⚠ Drive\'daki dosya okunamıyor (bozuk). Bu cihazdakini yazabilir ya da önce Drive yedeğinden geri yükleyebilirsiniz.'; }
   else if(drive.working){ cls += ' warn'; msg = '☁ ' + drive.working; }
   else if(drive.connecting){ cls += ' warn'; msg = '☁ Google Drive\'a bağlanılıyor…'; }
@@ -2835,8 +2897,18 @@ function renderAlarmBar(){
   var due = dueAlarms();
   lastDueKey = due.map(function(a){ return a.id + ':' + a.at; }).join('|');
   clear(bar);
-  due.forEach(function(a){
-    systemNotify(a);
+  due.forEach(function(a){ systemNotify(a); });
+  /* birden fazla varsa toplu onay; çok birikirse yalnızca en yeni üçü kart olarak */
+  var SHOW = 3, shownDue = due.length > SHOW ? due.slice(-SHOW).reverse() : due;
+  if(due.length > 1){
+    bar.appendChild(el('div', { class:'alarm alarm-all' }, [ el('div', { class:'arow' }, [
+      ic('bell'),
+      el('span', { class:'atext', text: due.length + ' hatırlatıcının zamanı geldi' + (due.length > SHOW ? ' (en yeni ' + SHOW + ' tanesi aşağıda)' : '') }),
+      due.length > SHOW ? el('button', { type:'button', class:'small', text:'Tümünü gör', onclick:function(){ switchTab('alarm'); } }) : null,
+      el('button', { type:'button', class:'primary small', text:'✓ Hepsini onayla', onclick: ackAllDue })
+    ]) ]));
+  }
+  shownDue.forEach(function(a){
     var kids = [ el('div', { class:'arow' }, [
       ic('bell'),
       el('span', { class:'atext', text:a.text }),
@@ -4304,7 +4376,11 @@ function renderAlarms(){
 
   var list = alarmList().slice().sort(function(a, b){ return a.at - b.at; });
   var now = Date.now();
-  var panel = el('div', { class:'panel', style:'margin-top:14px' }, [ el('h2', { text:'Hatırlatıcılar (' + list.length + ')' }) ]);
+  var nDue = dueAlarms().length;
+  var panel = el('div', { class:'panel', style:'margin-top:14px' }, [ el('div', { class:'dashbar', style:'margin-bottom:8px' }, [
+    el('h2', { style:'margin:0;flex:1', text:'Hatırlatıcılar (' + list.length + ')' }),
+    nDue > 1 ? el('button', { type:'button', class:'small', text:'✓ Zamanı gelenlerin hepsini onayla (' + nDue + ')', onclick: ackAllDue }) : null
+  ]) ]);
   if(!list.length){
     panel.appendChild(el('div', { class:'empty', text:'Henüz hatırlatıcı yok. Zamanı gelince sayfanın en üstünde uyarı çıkar; Onayla derseniz silinir, Ertele derseniz yeni zaman girersiniz. Bir iş maddesinin ⋯ menüsünden de hatırlatıcı kurabilirsiniz.' }));
   } else {
