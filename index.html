@@ -512,6 +512,7 @@
   .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-top:18px}
   .proj.board-head{margin-bottom:0}
   @media (max-width:900px){ .board{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:560px){ .board{grid-template-columns:1fr} .bcol{min-height:0} }
   .bcol{min-height:140px;padding:10px;border-radius:12px;background:var(--sub)}
   .bcol.drop{outline:2px dashed var(--accent);outline-offset:-2px}
   .bcolh{display:flex;align-items:center;gap:8px;padding:2px 2px 10px}
@@ -3547,18 +3548,27 @@ function renderTasks(){
     return el('button', { type:'button', class: viewMode === v[0] ? 'on' : null, 'aria-pressed': viewMode === v[0] ? 'true' : 'false',
       onclick:function(){ setView(v[0]); render(); } }, [ ic(v[2], 's'), tx(v[1]) ]);
   })));
+  /* telefon arayüzünde (Android uygulaması) sıralama ve arşiv seçenekleri ⋯ menüsünde, çubuk tek satır kalsın */
+  var compact = document.documentElement.classList.contains('mobile');
+  var ssel = null;
   if(viewMode === 'list'){
-    var ssel = el('select', { 'aria-label':'Sıralama', title:'Sıralama', onchange:function(e){ sortMode = e.target.value; lsSet('is-takip-sort', sortMode); render(); } }, [
+    ssel = el('select', { 'aria-label':'Sıralama', title:'Sıralama', onchange:function(e){ sortMode = e.target.value; lsSet('is-takip-sort', sortMode); render(); } }, [
       el('option', { value:'manual', text:'Elle sıralama' }), el('option', { value:'prio', text:'Önceliğe göre' }), el('option', { value:'due', text:'Son tarihe göre' })
     ]);
     ssel.value = sortMode;
-    bar.appendChild(ssel);
+    if(!compact) bar.appendChild(ssel);
   }
   var acb = el('input', { type:'checkbox', id:'showArc' });
   acb.checked = showArchivedTasks;
   acb.addEventListener('change', function(){ showArchivedTasks = acb.checked; render(); });
-  bar.appendChild(el('label', { for:'showArc' }, [ acb, el('span', { text:'Arşivdekiler' }) ]));
-  bar.appendChild(menu([ mBtn('🗄 Tamamlanan maddeleri arşivle', archiveDoneItems) ]));
+  var arcLabel = el('label', { for:'showArc' }, [ acb, el('span', { text: compact ? 'Arşivdekileri göster' : 'Arşivdekiler' }) ]);
+  if(!compact) bar.appendChild(arcLabel);
+  bar.appendChild(menu([
+    compact && ssel ? el('div', { class:'mrow' }, [ el('label', { text:'Sırala' }), ssel ]) : null,
+    compact ? el('div', { class:'mrow' }, [ arcLabel ]) : null,
+    compact ? mSep() : null,
+    mBtn('🗄 Tamamlanan maddeleri arşivle', archiveDoneItems)
+  ]));
   bar.hidden = !state.projects.length;
 
   var shown = state.projects.filter(function(p){ return (showArchivedTasks || !p.archived) && (!tasksFilter || p.id === tasksFilter); });
