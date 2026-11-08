@@ -10,10 +10,12 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root{
-    --bg:#f4f5f7; --card:#ffffff; --sub:#f7f8fa; --text:#1f2430; --muted:#5d6471; --line:#e3e6ec;
+    --bg:#f6f7f9; --card:#ffffff; --sub:#f2f4f7; --text:#1c2230; --muted:#667085; --line:#e4e7ec;
     --accent:#3b6cf6; --accent-text:#fff; --ok:#15803d; --ok-bg:#e8f6ee; --danger:#c81e1e; --warn:#92400e;
     --mark:#fde68a; --mark-text:#1f2430; --alarm-bg:#fff4d6; --shadow:0 8px 24px rgba(16,20,30,.14);
     --p1:#b45309; --p1-bg:#fef3c7; --p2:#b91c1c; --p2-bg:#fee2e2;
+    --faint:#98a2b3; --hover:#f3f5f8; --line2:#eef0f3; --accent-weak:#ebf0ff; --danger-bg:#fdeceb; --warn-bg:#fdf4e3;
+    --shadow-s:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -21,6 +23,8 @@
       --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24;
       --mark:#854d0e; --mark-text:#fff7d6; --alarm-bg:#3a2c0a; --shadow:0 8px 24px rgba(0,0,0,.5);
       --p1:#fbbf24; --p1-bg:#3a2c0a; --p2:#f87171; --p2-bg:#3b1718;
+      --faint:#6b7585; --hover:#22262e; --line2:#25292f; --accent-weak:#1c2440; --danger-bg:#2c1616; --warn-bg:#2b220f;
+      --shadow-s:0 1px 2px rgba(0,0,0,.45);
     }
   }
   :root[data-theme="dark"]{
@@ -28,10 +32,12 @@
     --accent:#6b8cff; --accent-text:#0e1220; --ok:#4ade80; --ok-bg:#16281d; --danger:#f87171; --warn:#fbbf24;
     --mark:#854d0e; --mark-text:#fff7d6; --alarm-bg:#3a2c0a; --shadow:0 8px 24px rgba(0,0,0,.5);
     --p1:#fbbf24; --p1-bg:#3a2c0a; --p2:#f87171; --p2-bg:#3b1718;
+    --faint:#6b7585; --hover:#22262e; --line2:#25292f; --accent-weak:#1c2440; --danger-bg:#2c1616; --warn-bg:#2b220f;
+    --shadow-s:0 1px 2px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box}
   [hidden]{display:none!important}
-  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
   .wrap{max-width:1150px;margin:0 auto;padding:24px 16px 64px}
   header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
   h1{margin:0;font-size:24px}
@@ -348,6 +354,161 @@
   .dtpick input[type=date]{flex:1 1 auto;width:auto;min-width:0}
   .dtpick input.tm[type=text]{flex:0 0 72px;width:72px;min-width:0;text-align:center;padding:8px 6px}
   .mfield .dtpick{display:flex;width:100%}
+  /* ===== Arayüz: sade liste görünümü ===== */
+  .i{width:16px;height:16px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+  .i.s{width:14px;height:14px;vertical-align:-2px}
+  .ib{display:inline-grid;place-items:center;width:30px;height:30px;min-height:0;padding:0;border:0;border-radius:8px;background:none;color:var(--muted)}
+  .ib:hover{background:var(--hover);color:var(--text)}
+  .btn-s{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;min-height:0;border-radius:8px;font-weight:600;font-size:13px}
+  kbd{font:11px/1 system-ui,sans-serif;padding:3px 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;color:var(--muted);background:var(--card)}
+  .rowmenu > summary{border-color:transparent;background:none}
+  .rowmenu > summary:hover,.rowmenu[open] > summary{background:var(--hover);border-color:transparent}
+
+  /* sol menü */
+  .sbrand{display:flex;align-items:center;gap:10px;font-size:16px;padding:2px 8px 2px}
+  .logo{width:26px;height:26px;border-radius:7px;background:var(--accent);color:var(--accent-text);display:grid;place-items:center}
+  .logo .i{stroke-width:2.6}
+  .ssearch{display:flex;align-items:center;gap:8px;width:100%;min-height:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;color:var(--faint);background:var(--card);text-align:left}
+  .ssearch span{flex:1}
+  .ssearch:hover{border-color:var(--faint)}
+  .snav{gap:1px}
+  .snavbtn{gap:10px;padding:7px 10px;font-weight:500;min-height:0}
+  .snavbtn:hover{background:var(--hover);color:var(--text)}
+  .snavbtn.on{background:var(--accent-weak);color:var(--accent);box-shadow:none}
+  .snavbtn .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .snavbtn .n{font-size:12px;color:var(--faint);font-weight:500;font-variant-numeric:tabular-nums}
+  .snavh{display:flex;align-items:center;justify-content:space-between;padding:0 10px;margin-top:6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .snavh button{display:grid;place-items:center;width:24px;height:24px;min-height:0;padding:0;border:0;border-radius:6px;background:none;color:var(--faint)}
+  .snavh button:hover{color:var(--text);background:var(--hover)}
+  .pdot{width:9px;height:9px;border-radius:50%;background:var(--c);flex:0 0 auto;margin:0 3px;display:inline-block}
+  .sproj-add input{width:100%;padding:7px 10px;font-size:13px}
+  .sthemebtn{border:0;background:none;color:var(--muted);font-size:13px}
+  .sthemebtn:hover{background:var(--hover);color:var(--text)}
+  .ssave .sshead .i{flex:0 0 auto}
+
+  /* uyarı şeridi */
+  .alarm{border:0;border-radius:10px;background:var(--warn-bg);padding:8px 12px;box-shadow:var(--shadow-s)}
+  .alarm .arow > .i{color:var(--warn)}
+
+  /* İşler: araç çubuğu */
+  .tasksbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;font-size:13px;color:var(--muted)}
+  .tasksbar .sp{flex:1}
+  .tasksbar select{padding:6px 8px;font-size:13px;min-height:0}
+  .tasksbar label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .seg{display:inline-flex;padding:2px;border-radius:9px;background:var(--sub)}
+  .seg button{display:inline-flex;align-items:center;gap:6px;min-height:0;padding:5px 10px;border:0;border-radius:7px;background:none;font-size:13px;font-weight:500;color:var(--muted)}
+  .seg button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow-s)}
+  @media (min-width:1500px){ #projectForm{display:none} }
+
+  /* proje */
+  .proj{margin:22px 0 40px}
+  .proj-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .proj-h .ptitle{margin:0;flex:1;min-width:0;font-size:20px;font-weight:700;letter-spacing:-.01em;text-transform:none;color:var(--text);word-break:break-word}
+  .proj.single .ptitle{font-size:24px}
+  .pmeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin:6px 0 10px;font-size:13px;color:var(--muted)}
+  .pmeta span{display:inline-flex;align-items:center;gap:5px}
+  .pmeta .over{color:var(--danger);font-weight:600}
+  .bar{height:6px;border-radius:3px;background:var(--sub);overflow:hidden}
+  .bar > span{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .3s}
+  .pinfo{display:flex;flex-direction:column;gap:6px;margin:14px 0 0}
+  .pinfo .note{margin:0;background:var(--sub);border-left-color:var(--line)}
+  .rems{display:flex;flex-direction:column;gap:2px}
+  .rem{display:flex;align-items:center;gap:8px;padding:2px 4px 2px 8px;border-radius:8px;font-size:13px;color:var(--muted)}
+  .rem:hover{background:var(--hover)}
+  .rem .rtxt{flex:1;min-width:0;word-break:break-word}
+  .rem .ib{width:26px;height:26px}
+  @media (hover:hover){ .rem .ib{opacity:0} .rem:hover .ib,.rem:focus-within .ib{opacity:1} }
+  .remadd{display:flex;gap:8px;align-items:flex-start}
+  .remadd .remform{flex:1;margin-top:0}
+
+  /* iş bölümü */
+  .tsec{margin-top:22px}
+  .th{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:5px 4px;border-bottom:1px solid var(--line)}
+  .th h3{margin:0;font-size:15px;font-weight:700;word-break:break-word}
+  .th > form{flex:1 0 100%}
+  .tog{display:grid;place-items:center;width:24px;height:24px;min-height:0;padding:0;border:0;border-radius:6px;background:none;color:var(--faint)}
+  .tog:hover{background:var(--hover);color:var(--text)}
+  .tog .i{transition:transform .15s;transform:rotate(90deg)}
+  .tsec.closed .tog .i{transform:none}
+  .tsec.closed .tbody{display:none}
+  .tbody > .note{margin:8px 0 2px}
+  .stpill{-webkit-appearance:none;appearance:none;min-height:0;padding:3px 10px 3px 22px;border:0;border-radius:20px;font-size:12px;font-weight:600;line-height:1.4;cursor:pointer;
+    color:var(--muted);background:var(--sub) radial-gradient(circle at 11px 50%, currentColor 3px, transparent 3.6px) no-repeat}
+  .stpill.st-doing{color:var(--accent);background-color:var(--accent-weak)}
+  .stpill.st-blocked{color:var(--danger);background-color:var(--danger-bg)}
+  .stpill.st-done{color:var(--ok);background-color:var(--ok-bg);cursor:default}
+  .tcount{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+  .tbar{width:60px}
+  .th .sp{flex:1}
+  .th .acts{display:flex;align-items:center;gap:2px}
+
+  /* madde satırları */
+  ul.rows{list-style:none;margin:0;padding:0}
+  li.row{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;align-items:center;gap:2px 8px;padding:6px 4px;border-top:0;border-bottom:1px solid var(--line2);border-radius:8px}
+  li.row:hover{background:var(--hover)}
+  li.row > form,li.row > .noteform,li.row > .inlineform{grid-column:1/-1}
+  .ck{display:grid;place-items:center;width:20px;height:20px;min-height:0;padding:0;margin-left:4px;border:1.8px solid var(--faint);border-radius:50%;background:none;color:transparent;transition:background .12s,border-color .12s}
+  .ck .i{width:12px;height:12px;stroke-width:3;vertical-align:0}
+  .ck:hover{color:var(--ok);border-color:var(--ok)}
+  .ck.p2{border-color:var(--danger);background:var(--danger-bg)}
+  .ck.p1{border-color:var(--warn);background:var(--warn-bg)}
+  li.row.done .ck{background:var(--ok);border-color:var(--ok);color:#fff}
+  li.row.done .rtitle{text-decoration:line-through;color:var(--faint)}
+  .rt{min-width:0}
+  .rtitle{word-break:break-word}
+  .rnote{display:flex;align-items:center;gap:5px;max-width:100%;min-height:0;padding:0;border:0;background:none;text-align:left;font-size:12px;color:var(--faint);cursor:pointer}
+  .rnote span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rnote:hover{color:var(--muted)}
+  .chips{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)}
+  .chip,.prio,.due,.linkchip{display:inline-flex;align-items:center;gap:4px;padding:0;border:0;border-radius:0;background:none;font-size:12px;font-weight:500;color:var(--muted);white-space:nowrap}
+  .prio.p1{color:var(--warn);background:none}
+  .prio.p2{color:var(--danger);background:none}
+  .due.soon,.due.today{color:var(--warn);border:0;font-weight:600}
+  .due.over{color:var(--danger);border:0;font-weight:600}
+  .due.ok{color:var(--ok)}
+  .chipbtn{display:inline-flex;align-items:center;gap:4px;min-height:0;margin:-2px -6px;padding:2px 6px;border:0;border-radius:6px;background:none;font-size:12px;color:var(--muted);white-space:nowrap}
+  .chipbtn:hover{background:var(--sub);color:var(--text)}
+  .addrow{display:flex;align-items:center;gap:10px;width:100%;min-height:0;padding:7px 4px;border:0;border-radius:8px;background:none;text-align:left;font-size:13px;color:var(--faint)}
+  .addrow:hover{color:var(--accent);background:var(--hover)}
+  .addrow .plus{display:grid;place-items:center;width:20px;height:20px;margin-left:4px;border-radius:50%}
+  .addrow:hover .plus{background:var(--accent);color:var(--accent-text)}
+  .addin{display:flex;gap:8px;align-items:center;padding:6px 4px 6px 38px}
+  .addin input[type=text]{flex:1;padding:7px 10px}
+  .proj > .task-add{margin-top:16px}
+  .proj > .addin.task-add{padding-left:4px}
+  .donetog{display:inline-flex;align-items:center;gap:6px;min-height:0;margin:6px 0 0;padding:4px 8px;border:0;border-radius:7px;background:none;font-size:12px;font-weight:600;color:var(--faint)}
+  .donetog:hover{background:var(--hover);color:var(--text)}
+  .donetog .i{transition:transform .15s}
+  .donetog.open .i{transform:rotate(90deg)}
+  /* dar ekranda etiketler başlığın altına */
+  @media (max-width:640px){
+    li.row{grid-template-columns:30px minmax(0,1fr) auto}
+    li.row > .chips{grid-column:2;grid-row:2;justify-content:flex-start}
+    li.row > .chips:empty{display:none}
+    li.row > .rowmenu{grid-column:3;grid-row:1}
+  }
+  /* işlem düğmeleri fare üstüne gelince; dokunmatik ekranda her zaman */
+  @media (hover:hover){
+    li.row .rowmenu,.th .acts > *{opacity:0;transition:opacity .12s}
+    li.row:hover .rowmenu,li.row:focus-within .rowmenu,li.row .rowmenu[open],
+    .th:hover .acts > *,.th:focus-within .acts > *,.th .rowmenu[open]{opacity:1}
+  }
+
+  /* pano */
+  .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-top:18px}
+  @media (max-width:900px){ .board{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  .bcol{min-height:140px;padding:10px;border-radius:12px;background:var(--sub)}
+  .bcol.drop{outline:2px dashed var(--accent);outline-offset:-2px}
+  .bcolh{display:flex;align-items:center;gap:8px;padding:2px 2px 10px}
+  .bcolh .stpill{cursor:default}
+  .bcard{margin-bottom:8px;padding:10px 12px;border:1px solid transparent;border-radius:10px;background:var(--card);box-shadow:var(--shadow-s);cursor:pointer}
+  .bcard[draggable="true"]{cursor:grab}
+  .bcard:hover{border-color:var(--line)}
+  .bcard h4{margin:0 0 6px;font-size:14px;word-break:break-word}
+  .bproj{display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:12px;color:var(--faint)}
+  .bcard .chips{justify-content:flex-start}
+  .bcard .bar{margin-top:10px}
+
   /* Yazdırma */
   #printSheet{display:none}
   .psheet h2{color:var(--text)}
@@ -369,11 +530,34 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-6M2 20h20"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9M10.3 20.5a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 19.5A2.5 2.5 0 0 1 7.5 17H20V3H7.5A2.5 2.5 0 0 0 5 5.5zM5 19.5A2.5 2.5 0 0 0 7.5 22H20v-5"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19.5 10 4 4 0 0 1 18 18z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h9"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 4H6l3-4z"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+</svg>
 <div class="shell">
 <aside class="side" id="sideLeft" aria-label="Gezinme ve kayıt durumu">
-  <div class="sbrand">📋 İş Takip</div>
+  <div class="sbrand"><span class="logo"><svg class="i"><use href="#i-check"/></svg></span>İş Takip</div>
+  <button type="button" class="ssearch" id="sideSearch" title="Ara ( / tuşu )"><svg class="i"><use href="#i-search"/></svg><span>Ara</span><kbd>/</kbd></button>
   <nav class="snav" id="sideNav" aria-label="Bölümler"></nav>
-  <div class="sstats" id="sideStats"></div>
+  <div class="snavh"><span>Projeler</span><button type="button" id="sideAddProj" title="Yeni proje" aria-label="Yeni proje"><svg class="i s"><use href="#i-plus"/></svg></button></div>
+  <div id="sideProjAdd"></div>
+  <nav class="snav" id="sideProjects" aria-label="Projeler"></nav>
   <div class="ssave" id="sideSave"></div>
   <button type="button" id="themeBtn2" class="small sthemebtn" title="Görünüm: otomatik / açık / koyu">🌓 Otomatik</button>
 </aside>
@@ -409,20 +593,8 @@
       <input type="text" id="projectInput" placeholder="Yeni proje adı (örn. Web Sitesi Yenileme)" maxlength="80" autocomplete="off" aria-label="Yeni proje adı">
       <button class="primary" type="submit">Proje Ekle</button>
     </form>
-    <div class="dashbar" id="taskFilterBar"></div>
-    <div class="layout">
-      <section aria-label="Devam eden işler">
-        <h2>Devam Eden İşler</h2>
-        <div class="col" id="projects"></div>
-      </section>
-      <section aria-label="Tamamlanan işler">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-          <h2 style="margin:0">Tamamlandı</h2>
-          <button class="small" id="clearDone" title="Tamamlanan maddeleri arşive taşır; dashboard ve takvim geçmişi korunur">Tamamlananları Arşivle</button>
-        </div>
-        <div class="col" id="doneList"></div>
-      </section>
-    </div>
+    <div class="tasksbar" id="taskFilterBar"></div>
+    <div id="projects" aria-label="Projeler ve işler"></div>
   </div>
 
   <div id="tab-cal" role="tabpanel" aria-labelledby="tabbtn-cal" tabindex="-1" hidden><div id="calView"></div></div>
@@ -1209,7 +1381,7 @@ var drive = {
   err:'', info:'', working:'', choice:null, setup:false, picker:null,
   token:null, exp:0, tokenP:null, gisP:null,
   folderId:null, backupsId:null, fileId:null,
-  hist:[], histLoaded:false, unsynced:false, pending:false, runP:null,
+  offline:'', hist:[], histLoaded:false, unsynced:false, pending:false, runP:null,
   timer:null, poll:null, lastSync:0, backupDay:''
 };
 function driveClientId(){ return (GOOGLE_CLIENT_ID || lsGet('is-takip-gcid') || '').trim(); }
@@ -1426,7 +1598,7 @@ function histTop(){ return drive.hist[0] || null; }
 /* --- eşitleme ------------------------------------------------------------ */
 function applyState(s){ state = s; render(); updateBar(); saveSnapshot(); }
 function afterSynced(json){
-  drive.lastSync = Date.now(); drive.err = ''; drive.needsLogin = false; drive.loginReason = '';
+  drive.lastSync = Date.now(); drive.err = ''; drive.offline = ''; drive.needsLogin = false; drive.loginReason = '';
   drive.unsynced = canon(state) !== json;    /* yazarken yeni değişiklik olduysa döngü tekrar yazar */
   if(drive.unsynced) drive.pending = true;
   else if(!canWrite) dirty = false;
@@ -1533,6 +1705,11 @@ function driveSync(){
 function driveSyncNow(){ drive.info = ''; return driveSync(); }
 function driveFail(e){
   if(e && (e.auth || e.status === 401 || e.status === 403)){ drive.needsLogin = true; drive.loginReason = errMsg(e); return; }
+  /* internet yok / sunucu geçici olarak yanıt vermiyor: hata değil, bekleme durumu (çubuğu açtırmaz) */
+  if(e && (e.name === 'TypeError' || e.status === 429 || e.status >= 500)){
+    drive.offline = 'Şu an Drive\'a ulaşılamıyor; değişiklikler bu cihazda güvende, bağlantı gelince kendiliğinden eşitlenir.';
+    return;
+  }
   drive.err = 'Drive ile eşitlenemedi: ' + errMsg(e) + ' — değişiklikler bu cihazda güvende, bağlantı düzelince kendiliğinden eşitlenir.';
 }
 /* Her değişiklikte çağrılır: kısa bir beklemeden sonra eşitle */
@@ -1697,7 +1874,7 @@ function driveDisconnect(){
   if(drive.token){
     try { if(window.google && google.accounts && google.accounts.oauth2 && google.accounts.oauth2.revoke) google.accounts.oauth2.revoke(drive.token); } catch(e){}
   }
-  drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = ''; drive.picker = null; drive.unsynced = false;
+  drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = ''; drive.offline = ''; drive.picker = null; drive.unsynced = false;
   drive.folderId = drive.backupsId = drive.fileId = null;
   drive.hist = []; drive.histLoaded = false;
   idbSet({ fileId:null, list:[] }, 'drivehist');
@@ -1864,7 +2041,9 @@ function addProject(title){
   tasksFilter = '';
   var p = { id: uid(), title: title, createdAt: Date.now(), tasks: [], reminders: [], archived: null };
   state.projects.push(p);
+  addOpen['task:' + p.id] = true;            /* yeni projede "iş ekle" alanı açık gelsin */
   commit('task:' + p.id);
+  return p;
 }
 function deleteProject(pid){
   var i = state.projects.findIndex(function(x){ return x.id === pid; });
@@ -2199,6 +2378,7 @@ function driveBarParts(){
       (isStandalone() ? ' (Yüklü uygulama penceresinde Google tıklamasız girişe izin vermiyor; tarayıcı sekmesinde bu sorun çıkmaz. Bir kez bağlandığınızda yetki yaklaşık bir saat hatırlanır.)' : '') +
       (drive.loginReason ? ' (Sebep: ' + drive.loginReason + ')' : '');
   }
+  else if(drive.on && drive.offline){ cls += ' warn'; msg = '☁ ' + drive.offline; }
   else if(drive.on && drive.busy && driveDirty()){ cls += ' warn'; msg = '● Drive ile eşitleniyor…'; }
   else if(drive.on && driveDirty()){ cls += ' warn'; msg = '● Değişiklikler birazdan Drive\'a yazılacak…'; }
   else if(drive.on && drive.info){ cls += ' ok'; msg = drive.info; }
@@ -2285,6 +2465,7 @@ function barParts(){
     else if(drive.choice) short = 'Drive: seçim bekliyor';
     else if(drive.working || drive.connecting) short = 'Drive: işlem sürüyor…';
     else if(drive.needsLogin) short = 'Drive: giriş gerekli';
+    else if(drive.on && drive.offline) short = 'Drive: bağlantı bekleniyor';
     else if(drive.on && driveDirty()) short = 'Drive ile eşitleniyor…';
     else if(drive.on) short = 'Drive ile eşit';
     else if(driveFlag() && !driveClientId()) short = 'Drive: ayar eksik';
@@ -2345,7 +2526,7 @@ function renderSideSave(){
   box.className = 'ssave' + (st ? ' ' + st : '');
   box.appendChild(el('button', { type:'button', class:'sshead', 'aria-expanded': sideSaveOpen ? 'true' : 'false', title: p.msg,
     onclick:function(){ sideSaveOpen = !sideSaveOpen; renderSideSave(); } }, [
-    el('span', { 'aria-hidden':'true', text: st === 'ok' ? '✓' : st === 'err' ? '⚠' : st === 'warn' ? '●' : '💾' }),
+    ic('cloud'),
     el('span', { class:'nm', text: p.short }),
     el('span', { 'aria-hidden':'true', text: sideSaveOpen ? '▾' : '⋯' })
   ]));
@@ -2354,23 +2535,66 @@ function renderSideSave(){
   }
 }
 
-var TAB_LABELS = { tasks:'📋 İşler', cal:'📅 Takvim', dash:'📊 Dashboard', alarm:'⏰ Hatırlatıcı', notebook:'📓 Not Defteri', archive:'🗄 Arşiv', search:'🔍 Ara' };
+var TAB_ICONS = { tasks:'list', cal:'cal', dash:'chart', alarm:'bell', notebook:'book', archive:'archive' };
+var TAB_NAMES = { tasks:'Tüm işler', cal:'Takvim', dash:'Dashboard', alarm:'Hatırlatıcılar', notebook:'Not Defteri', archive:'Arşiv' };
+function openItemCount(p){
+  var n = 0;
+  p.tasks.forEach(function(t){ if(!t.archived) t.items.forEach(function(i){ if(!i.done && !i.archived) n++; }); });
+  return n;
+}
 function renderSideNav(){
   var nav = clear(document.getElementById('sideNav'));
-  var due = dueAlarms().length;
+  var due = dueAlarms().length, open = 0;
+  state.projects.forEach(function(p){ if(!p.archived) open += openItemCount(p); });
+  var counts = { tasks: open, notebook: noteList().length };
   TABS.forEach(function(k){
-    nav.appendChild(el('button', { type:'button', class:'snavbtn' + (k === tab ? ' on' : ''), 'data-tab': k,
-      'aria-current': k === tab ? 'page' : null, title: k === 'search' ? 'Ara ( / tuşu )' : null,
+    if(k === 'search') return;                         /* arama üstteki kutuda */
+    var on = k === tab && !(k === 'tasks' && tasksFilter);
+    nav.appendChild(el('button', { type:'button', class:'snavbtn' + (on ? ' on' : ''), 'data-tab': k, 'aria-current': on ? 'page' : null,
       onclick:function(){
-        if(k === 'search'){ openSearch(); return; }
-        switchTab(k);
+        if(k === 'tasks') tasksFilter = '';
+        if(tab === k){ editKey = null; render(); } else switchTab(k);
         var nb = document.querySelector('#sideNav [data-tab="' + k + '"]'); if(nb) nb.focus();
       } }, [
-      el('span', { class:'nm', text: TAB_LABELS[k] }),
-      k === 'alarm' && due ? el('span', { class:'sbadge', title: due + ' hatırlatıcının zamanı geldi', text: String(due) }) : null,
-      k === 'search' ? el('span', { class:'skey', text:'/' }) : null
+      ic(TAB_ICONS[k]), el('span', { class:'nm', text: TAB_NAMES[k] }),
+      k === 'alarm' && due ? el('span', { class:'sbadge', title: due + ' hatırlatıcının zamanı geldi', text: String(due) })
+        : (counts[k] ? el('span', { class:'n', text: String(counts[k]) }) : null)
     ]));
   });
+  renderSideProjects();
+}
+/* Sol menüdeki proje listesi: tıklayınca orta alanda yalnızca o proje */
+var sideProjAdd = false;
+function renderSideProjects(){
+  var box = clear(document.getElementById('sideProjects'));
+  var addBox = clear(document.getElementById('sideProjAdd'));
+  if(sideProjAdd){
+    var inp = el('input', { type:'text', maxlength:'80', autocomplete:'off', placeholder:'Proje adı… (Enter)', 'aria-label':'Yeni proje adı', 'data-key':'side-proj' });
+    inp.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ e.preventDefault(); sideProjAdd = false; renderSideProjects(); } });
+    addBox.appendChild(el('form', { class:'sproj-add', onsubmit:function(e){
+      e.preventDefault();
+      if(!inp.value.trim()) return;
+      sideProjAdd = false;
+      var np = addProject(inp.value);
+      tasksFilter = np.id; editKey = null;
+      if(tab !== 'tasks'){ prevTab = tab; tab = 'tasks'; }
+      render('task:' + np.id);
+    } }, [ inp ]));
+  }
+  state.projects.forEach(function(p){
+    if(p.archived && !showArchivedTasks) return;
+    var open = openItemCount(p), on = tab === 'tasks' && tasksFilter === p.id;
+    box.appendChild(el('button', { type:'button', class:'snavbtn' + (on ? ' on' : ''), 'data-pid': p.id, 'aria-current': on ? 'page' : null, title: p.title,
+      onclick:function(){
+        tasksFilter = p.id; editKey = null;
+        if(tab !== 'tasks'){ prevTab = tab; tab = 'tasks'; }
+        render(); window.scrollTo(0, 0);
+      } }, [
+      pdot(p), el('span', { class:'nm', text: p.title }),
+      p.archived ? el('span', { class:'n', text:'arşiv' }) : (open ? el('span', { class:'n', text: String(open) }) : null)
+    ]));
+  });
+  if(!state.projects.length && !sideProjAdd) box.appendChild(el('div', { class:'empty', style:'padding:2px 10px;font-size:12px', text:'Henüz proje yok.' }));
 }
 
 /* Sağ sütun: "Bugün" paneli */
@@ -2473,9 +2697,11 @@ function renderSides(){
   if(!isWide()) return;
   /* hızlı not yazılırken yeniden çizim olursa odak ve imleç korunsun */
   var a = document.activeElement, keep = a && a.id === 'quickNote' ? [a.selectionStart, a.selectionEnd] : null;
+  var sideVal = a && a.getAttribute && a.getAttribute('data-key') === 'side-proj' ? a.value : null;
   renderSideNav();
   renderToday();
   if(keep){ var q = document.getElementById('quickNote'); q.focus(); q.setSelectionRange(keep[0], keep[1]); }
+  if(sideVal !== null){ var si = document.querySelector('[data-key="side-proj"]'); if(si){ si.value = sideVal; si.focus(); } }
 }
 
 /* --- sistem bildirimleri ------------------------------------------------- */
@@ -2514,7 +2740,7 @@ function renderAlarmBar(){
   due.forEach(function(a){
     systemNotify(a);
     var kids = [ el('div', { class:'arow' }, [
-      el('span', { text:'⏰', 'aria-hidden':'true' }),
+      ic('bell'),
       el('span', { class:'atext', text:a.text }),
       el('span', { class:'awhen', text:fmt(a.at) }),
       a.ref ? el('button', { type:'button', class:'small', text:'→ İlgili iş', onclick:function(){ gotoRef(a.ref); } }) : null,
@@ -2599,10 +2825,30 @@ function noteBlock(obj){
   if(!obj.note) return null;
   return el('div', { class:'note', text: obj.note });
 }
+/* --- simgeler ve proje renkleri ------------------------------------------ */
+var SVGNS = 'http://www.w3.org/2000/svg';
+function ic(name, cls){
+  var s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('class', 'i' + (cls ? ' ' + cls : ''));
+  s.setAttribute('aria-hidden', 'true');
+  var u = document.createElementNS(SVGNS, 'use');
+  u.setAttribute('href', '#i-' + name);
+  s.appendChild(u);
+  return s;
+}
+function tx(s){ return document.createTextNode(s); }
+/* proje rengi kimlikten türetilir (veriye alan eklenmez) */
+var PCOLORS = ['#3b6cf6','#12a150','#d97706','#9b5de5','#e5484d','#0891b2','#db2777','#65a30d'];
+function projColor(p){ var h = 0, s = str(p.id); for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return PCOLORS[h % PCOLORS.length]; }
+function pdot(p){ return el('span', { class:'pdot', style:'--c:' + projColor(p), 'aria-hidden':'true' }); }
+
 function durBtn(it){
-  return el('button', { class:'dur' + (it.minutes ? ' set' : ''), title:'Çalışma süresini gir / düzenle',
+  return el('button', { type:'button', class:'chipbtn', title:'Çalışma süresini gir / düzenle',
     'aria-label':'Çalışma süresi: ' + (it.minutes ? fmtMin(it.minutes) : 'girilmemiş'),
-    text: it.minutes ? '⏱ ' + fmtMin(it.minutes) : '⏱ Süre gir', onclick:function(){ startEdit('m:' + it.id); } });
+    onclick:function(){ startEdit('m:' + it.id); } }, [ ic('clock', 's'), tx(it.minutes ? fmtMin(it.minutes) : 'Süre gir') ]);
+}
+function minChip(it){
+  return it.minutes ? el('span', { class:'chip', title:'Girilen çalışma süresi' }, [ ic('clock', 's'), tx(fmtMin(it.minutes)) ]) : null;
 }
 function durForm(it){
   var inp = el('input', { type:'text', maxlength:'40', autocomplete:'off', placeholder:'örn. 4 saat, 90 dk, 1:30', 'data-edit':'1', 'aria-label':'Çalışma süresi' });
@@ -2622,8 +2868,8 @@ function durForm(it){
   ]);
 }
 function dateBtn(it, timeOnly){
-  return el('button', { class:'dur', title:'Tamamlanma tarih / saatini düzenle', 'aria-label':'Tamamlanma: ' + fmt(it.doneAt),
-    text:'🕒 ' + (timeOnly ? fmtTime(it.doneAt) : fmt(it.doneAt)), onclick:function(){ startEdit('d:' + it.id); } });
+  return el('button', { type:'button', class:'chipbtn', title:'Tamamlanma tarih / saatini düzenle', 'aria-label':'Tamamlanma: ' + fmt(it.doneAt),
+    onclick:function(){ startEdit('d:' + it.id); } }, [ ic('check', 's'), tx(timeOnly ? fmtTime(it.doneAt) : fmt(it.doneAt)) ]);
 }
 function dateForm(it){
   var inp = dtInput({ 'data-edit':'1', 'aria-label':'Tamamlanma tarihi' });
@@ -2643,17 +2889,20 @@ function dateForm(it){
 function prioChip(o){
   var p = o.priority || 0;
   if(!p) return null;
-  return el('span', { class:'prio p' + p, title:'Öncelik: ' + PRIO[p], text:(p === 2 ? '🔥 ' : '⬆ ') + PRIO[p] });
+  return el('span', { class:'prio p' + p, title:'Öncelik: ' + PRIO[p] }, [ ic('flag', 's'), tx(PRIO[p]) ]);
 }
 function dueChip(o, done){
   var d = dueInfo(o.due, done);
   if(!d) return null;
-  return el('span', { class:'due ' + d.cls, title:'Son tarih: ' + fmtDay(o.due), text:'📅 ' + d.label });
+  return el('span', { class:'due ' + (d.today && !done ? 'today' : d.cls), title:'Son tarih: ' + fmtDay(o.due) }, [ ic('cal', 's'), tx(d.label) ]);
 }
+/* maddeye bağlı en yakın hatırlatıcının saati */
 function alarmChip(id){
-  var n = alarmList().filter(function(a){ return a.ref && a.ref.iid === id; }).length;
-  if(!n) return null;
-  return el('span', { class:'linkchip', title: n + ' hatırlatıcı bağlı', text:'⏰ ' + n });
+  var l = alarmList().filter(function(a){ return a.ref && a.ref.iid === id; }).sort(function(a, b){ return a.at - b.at; });
+  if(!l.length) return null;
+  var a = l[0], k = dayKey(a.at);
+  var when = (k === todayKey() ? '' : fmtDayShort(k) + ' ') + fmtTime(a.at) + (l.length > 1 ? ' +' + (l.length - 1) : '');
+  return el('span', { class:'linkchip', title: l.length + ' hatırlatıcı bağlı — ilki: ' + fmt(a.at) }, [ ic('bell', 's'), tx(when) ]);
 }
 /* açılır satır menüsü */
 function menu(parts){
@@ -2726,33 +2975,65 @@ function alarmForItem(p, t, it){
     el('button', { type:'button', class:'small', text:'İptal', onclick: cancelEdit }), err
   ]);
 }
+/* Satırın solundaki yuvarlak: tamamla / geri al (öncelik rengini taşır) */
+function itemCk(p, t, it){
+  var done = !!it.done;
+  return el('button', { type:'button', class:'ck' + (!done && it.priority ? ' p' + it.priority : ''),
+    title: done ? 'Geri al' : 'Tamamlandı olarak işaretle', 'aria-label': (done ? 'Geri al: ' : 'Tamamla: ') + snip(it.text, 60),
+    onclick:function(){ setDone(p.id, t.id, it.id, !done); } }, [ ic('check') ]);
+}
+/* notun yalnızca ilk satırı; tıklayınca düzenlenir */
+function notePreview(obj){
+  if(!obj.note || editKey === 'n:' + obj.id) return null;
+  var lines = obj.note.split('\n');
+  return el('button', { type:'button', class:'rnote', title: obj.note, onclick:function(){ startEdit('n:' + obj.id); } },
+    [ ic('note', 's'), el('span', { text: lines[0] + (lines.length > 1 ? ' …' : '') }) ]);
+}
+function rowText(it){
+  return el('div', { class:'rt' }, [
+    el('div', { class:'rtitle', text: it.text, title: it.createdAt ? 'Eklendi: ' + fmt(it.createdAt) : null }),
+    notePreview(it)
+  ]);
+}
 function openRow(p, t, it){
-  if(editKey === 'i:' + it.id) return el('li', null, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
-  return el('li', { 'data-sid': it.id }, [
-    prioChip(it),
-    el('span', { class:'txt', text: it.text }),
-    dueChip(it, false), alarmChip(it.id),
-    it.createdAt ? el('span', { class:'created-tag', title:'Eklenme Tarihi', text: fmt(it.createdAt) }) : null,
-    it.minutes ? el('span', { class:'dur set', title:'Girilen çalışma süresi', text:'⏱ ' + fmtMin(it.minutes) }) : null,
-    el('button', { class:'done-btn', text:'✓ Tamamlandı', onclick:function(){ setDone(p.id, t.id, it.id, true); } }),
+  if(editKey === 'i:' + it.id) return el('li', { class:'row' }, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
+  return el('li', { class:'row', 'data-sid': it.id }, [
+    itemCk(p, t, it),
+    rowText(it),
+    el('div', { class:'chips' }, [ prioChip(it), dueChip(it, false), alarmChip(it.id), minChip(it) ]),
     itemMenu(p, t, it),
+    editKey === 'n:' + it.id ? noteForm(it) : null,
     editKey === 'm:' + it.id ? durForm(it) : null,
-    editKey === 'al:' + it.id ? alarmForItem(p, t, it) : null,
-    noteBlock(it)
+    editKey === 'al:' + it.id ? alarmForItem(p, t, it) : null
   ]);
 }
 function doneRow(p, t, it, timeOnly){
-  if(editKey === 'i:' + it.id) return el('li', null, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
-  return el('li', { 'data-sid': it.id }, [
-    el('span', { class:'txt', text: it.text }),
-    it.archived ? el('span', { class:'tag', text:'arşiv' }) : null,
-    dateBtn(it, timeOnly), durBtn(it),
-    el('button', { class:'small', text:'↩ Geri Al', onclick:function(){ setDone(p.id, t.id, it.id, false); } }),
+  if(editKey === 'i:' + it.id) return el('li', { class:'row' }, [ editForm(it.text, 200, function(v){ editItem(p.id, t.id, it.id, v); }) ]);
+  return el('li', { class:'row done', 'data-sid': it.id }, [
+    itemCk(p, t, it),
+    rowText(it),
+    el('div', { class:'chips' }, [ it.archived ? el('span', { class:'tag', text:'arşiv' }) : null, durBtn(it), dateBtn(it, timeOnly) ]),
     itemMenu(p, t, it),
+    editKey === 'n:' + it.id ? noteForm(it) : null,
     editKey === 'm:' + it.id ? durForm(it) : null,
     editKey === 'd:' + it.id ? dateForm(it) : null,
-    editKey === 'al:' + it.id ? alarmForItem(p, t, it) : null,
-    noteBlock(it)
+    editKey === 'al:' + it.id ? alarmForItem(p, t, it) : null
+  ]);
+}
+/* "+ Madde ekle" satırı: tıklayınca yazma alanına dönüşür; ekledikçe açık kalır */
+var addOpen = {};
+function ghostAdd(key, label, placeholder, maxlen, onAdd, cls){
+  cls = cls ? ' ' + cls : '';
+  if(!addOpen[key]){
+    return el('button', { type:'button', class:'addrow' + cls, onclick:function(){ addOpen[key] = true; render(key); } },
+      [ el('span', { class:'plus' }, [ ic('plus', 's') ]), tx(label) ]);
+  }
+  var input = el('input', { type:'text', placeholder: placeholder, maxlength:String(maxlen), autocomplete:'off', 'data-key': key, 'aria-label': placeholder });
+  input.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ e.preventDefault(); addOpen[key] = false; render(); } });
+  return el('form', { class:'addin' + cls, onsubmit:function(e){ e.preventDefault(); if(input.value.trim()) onAdd(input.value); } }, [
+    input,
+    el('button', { type:'submit', class:'small primary', text:'Ekle' }),
+    el('button', { type:'button', class:'small', text:'Kapat', title:'Esc', onclick:function(){ addOpen[key] = false; render(); } })
   ]);
 }
 function addForm(placeholder, key, maxlen, onAdd, btnText){
@@ -2785,36 +3066,37 @@ function remForm(text, btnText, isEdit, onSave, dataKey){
   btns.push(el('span', { class:'hintx', text:'Enter: alt satır • Ctrl+Enter: ' + btnText.toLowerCase() }));
   return el('form', { class:'remform', onsubmit:function(e){ e.preventDefault(); submit(); } }, [ ta, el('div', { class:'rbtns' }, btns) ]);
 }
+/* Proje hatırlatmaları: tek satırlık sade liste; ekleme alanı yalnızca
+   proje menüsünden "Hatırlatma ekle" seçilince açılır */
 function remindersBlock(p){
   var list = remList(p);
-  var det = el('details', { class:'reminders' });
-  if(remOpen[p.id] || list.length || (editKey && editKey.indexOf('r:') === 0)) det.setAttribute('open', '');
-  det.addEventListener('toggle', function(){ remOpen[p.id] = det.open; });
-  det.appendChild(el('summary', null, [ el('span', { text:'📌 Hatırlatmalar' }), el('span', { class:'count', text:String(list.length) }) ]));
-  if(list.length){
-    var ul = el('ul');
-    list.forEach(function(r){
-      if(editKey === 'r:' + r.id){
-        ul.appendChild(el('li', { 'data-sid': r.id }, [ remForm(r.text, 'Kaydet', true, function(v){ editReminder(p.id, r.id, v); }) ]));
-        return;
-      }
-      ul.appendChild(el('li', { 'data-sid': r.id }, [
-        el('span', { class:'txt rtxt', text: r.text }),
-        r.createdAt ? el('span', { class:'created-tag', title:'Eklenme Tarihi', text: fmt(r.createdAt) }) : null,
-        el('button', { class:'icon', title:'Hatırlatmayı düzenle', text:'✎', 'aria-label':'Hatırlatmayı düzenle', onclick:function(){ startEdit('r:' + r.id); } }),
-        el('button', { class:'icon del', title:'Hatırlatmayı sil', text:'🗑', 'aria-label':'Hatırlatmayı sil', onclick:function(){ deleteReminder(p.id, r.id); } })
-      ]));
-    });
-    det.appendChild(ul);
+  var box = el('div', { class:'rems' });
+  list.forEach(function(r){
+    if(editKey === 'r:' + r.id){
+      box.appendChild(el('div', { 'data-sid': r.id }, [ remForm(r.text, 'Kaydet', true, function(v){ editReminder(p.id, r.id, v); }) ]));
+      return;
+    }
+    box.appendChild(el('div', { class:'rem', 'data-sid': r.id, title: r.createdAt ? 'Eklendi: ' + fmt(r.createdAt) : null }, [
+      ic('pin', 's'),
+      el('span', { class:'rtxt', text: r.text }),
+      el('button', { type:'button', class:'ib', title:'Hatırlatmayı düzenle', 'aria-label':'Hatırlatmayı düzenle', onclick:function(){ startEdit('r:' + r.id); } }, [ ic('pencil', 's') ]),
+      el('button', { type:'button', class:'ib', title:'Hatırlatmayı sil', 'aria-label':'Hatırlatmayı sil', onclick:function(){ deleteReminder(p.id, r.id); } }, [ ic('trash', 's') ])
+    ]));
+  });
+  if(remOpen[p.id]){
+    box.appendChild(el('div', { class:'remadd' }, [
+      remForm('', 'Ekle', false, function(v){ addReminder(p.id, v); }, 'rem:' + p.id),
+      el('button', { type:'button', class:'small', text:'Kapat', onclick:function(){ remOpen[p.id] = false; render(); } })
+    ]));
   }
-  det.appendChild(remForm('', 'Ekle', false, function(v){ addReminder(p.id, v); }, 'rem:' + p.id));
-  return det;
+  return box;
 }
 
 /* --- ajanda: geciken / bugün / bu hafta --------------------------------- */
 function renderAgenda(){
   var box = document.getElementById('agendaBox');
   clear(box);
+  if(isWide()) return;                 /* geniş ekranda bu bilgiler sağdaki "Bugün" panelinde */
   var list = dueItems();
   if(!list.length) return;
   var tk = todayKey();
@@ -2854,6 +3136,7 @@ function taskMenu(p, t){
     mBtn(t.note ? '📝 Notu düzenle' : '📝 Not ekle', function(){ startEdit('n:' + t.id); }),
     mBtn('✎ Adını düzenle', function(){ startEdit('t:' + t.id); }),
     mPrio(t), mDue(t),
+    t.items.some(function(i){ return !i.done; }) ? mBtn('✓ Açık maddelerin hepsini tamamla', function(){ completeTask(p.id, t.id); }) : null,
     mSep(),
     canMove(p.tasks, t.id, -1, sameVisibility) ? mBtn('▲ Yukarı taşı', function(){ moveTask(p.id, t.id, -1); }) : null,
     canMove(p.tasks, t.id, 1, sameVisibility) ? mBtn('▼ Aşağı taşı', function(){ moveTask(p.id, t.id, 1); }) : null,
@@ -2865,6 +3148,7 @@ function projectMenu(p){
   return menu([
     mBtn(p.note ? '📝 Notu düzenle' : '📝 Not ekle', function(){ startEdit('n:' + p.id); }),
     mBtn('✎ Adını düzenle', function(){ startEdit('p:' + p.id); }),
+    mBtn('📌 Hatırlatma ekle', function(){ remOpen[p.id] = true; render('rem:' + p.id); }),
     mSep(),
     canMove(state.projects, p.id, -1, sameVisibility) ? mBtn('▲ Yukarı taşı', function(){ moveProject(p.id, -1); }) : null,
     canMove(state.projects, p.id, 1, sameVisibility) ? mBtn('▼ Aşağı taşı', function(){ moveProject(p.id, 1); }) : null,
@@ -2872,134 +3156,224 @@ function projectMenu(p){
     mBtn('🗑 Sil', function(){ deleteProject(p.id); }, 'del')
   ]);
 }
+/* Ekran tercihleri (veriye yazılmaz, yalnızca bu tarayıcıda): daraltılan işler, liste / pano */
+var closedTasks = {}, doneOpen = {};
+try { (JSON.parse(lsGet('is-takip-closed') || '[]') || []).forEach(function(id){ closedTasks[id] = true; }); } catch(e){}
+function saveClosed(){ lsSet('is-takip-closed', JSON.stringify(Object.keys(closedTasks).slice(-300))); }
+var viewMode = lsGet('is-takip-view') === 'board' ? 'board' : 'list';
+function setView(v){ viewMode = v; lsSet('is-takip-view', v); }
+
+function statusPill(t, isDone){
+  if(isDone) return el('span', { class:'stpill st-done', text:'Tamamlandı' });
+  var sel = el('select', { class:'stpill st-' + (t.status || 'todo'), 'aria-label':'İş durumu: ' + t.title, title:'Durumu değiştir',
+    onchange:function(e){ t.status = e.target.value; commit(); } }, TSTATUS.map(function(o){ return el('option', { value:o[0], text:o[1] }); }));
+  sel.value = t.status || 'todo';
+  return sel;
+}
+function taskSection(p, t){
+  var items = t.items.filter(function(i){ return showArchivedTasks || !i.archived; });
+  var open = sortBy(items.filter(function(i){ return !i.done; }));
+  var done = items.filter(function(i){ return i.done; }).sort(function(a, b){ return (b.doneAt || 0) - (a.doneAt || 0); });
+  var isDone = taskIsDone(t), closed = !!closedTasks[t.id];
+  /* bu işin içinde bir şey düzenleniyorsa kapalı bölümü aç */
+  if(editKey){
+    var eid = editKey.slice(editKey.indexOf(':') + 1);
+    if(eid === t.id || items.some(function(i){ return i.id === eid; })){
+      closed = false;
+      if(done.some(function(i){ return i.id === eid; })) doneOpen[t.id] = true;
+    }
+  }
+  var head;
+  if(editKey === 't:' + t.id){
+    head = el('div', { class:'th' }, [ editForm(t.title, 100, function(v){ renameTask(p.id, t.id, v); }) ]);
+  } else {
+    head = el('div', { class:'th' }, [
+      el('button', { type:'button', class:'tog', 'aria-expanded': closed ? 'false' : 'true', 'aria-label': (closed ? 'Genişlet: ' : 'Daralt: ') + t.title,
+        onclick:function(){ if(closed) delete closedTasks[t.id]; else closedTasks[t.id] = true; saveClosed(); render(); } }, [ ic('chev', 's') ]),
+      el('h3', { text: t.title, title:'Adını düzenlemek için çift tıklayın', ondblclick:function(){ startEdit('t:' + t.id); } }),
+      t.archived ? el('span', { class:'tag', text:'arşiv' }) : null,
+      statusPill(t, isDone),
+      el('span', { class:'tcount', title: done.length + ' / ' + items.length + ' madde tamamlandı', text: done.length + '/' + items.length }),
+      items.length ? el('div', { class:'bar tbar', 'aria-hidden':'true' }, [ el('span', { style:'width:' + Math.round(done.length / items.length * 100) + '%' }) ]) : null,
+      prioChip(t), dueChip(t, isDone),
+      el('span', { class:'sp' }),
+      el('div', { class:'acts' }, [
+        el('button', { type:'button', class:'ib', title:'Madde ekle', 'aria-label':'Madde ekle: ' + t.title, onclick:function(){
+          delete closedTasks[t.id]; saveClosed(); addOpen['item:' + t.id] = true; render('item:' + t.id);
+        } }, [ ic('plus') ]),
+        taskMenu(p, t)
+      ])
+    ]);
+  }
+  var body = el('div', { class:'tbody' }, [ noteBlock(t) ]);
+  if(open.length){
+    var ul = el('ul', { class:'rows' });
+    open.forEach(function(it){ ul.appendChild(openRow(p, t, it)); });
+    body.appendChild(ul);
+  }
+  body.appendChild(ghostAdd('item:' + t.id, 'Madde ekle', 'Yeni madde…', 200, function(v){ addItem(p.id, t.id, v); }));
+  if(done.length){
+    var op = !!doneOpen[t.id];
+    body.appendChild(el('button', { type:'button', class:'donetog' + (op ? ' open' : ''), 'aria-expanded': op ? 'true' : 'false',
+      onclick:function(){ doneOpen[t.id] = !op; render(); } }, [ ic('chev', 's'), tx(done.length + ' tamamlanan') ]));
+    if(op){
+      var dl = el('ul', { class:'rows' });
+      done.forEach(function(it){ dl.appendChild(doneRow(p, t, it, false)); });
+      body.appendChild(dl);
+    }
+  }
+  return el('section', { class:'tsec' + (closed ? ' closed' : ''), 'data-sid': t.id }, [ head, body ]);
+}
+function projStats(p){
+  var s = { open:0, done:0, over:0, mins:0 }, tk = todayKey(), ym = tk.slice(0, 7);
+  p.tasks.forEach(function(t){
+    if(t.archived && !showArchivedTasks) return;
+    t.items.forEach(function(i){
+      if(i.archived && !showArchivedTasks) return;
+      if(i.done){ s.done++; if(i.minutes && i.doneAt && dayKey(i.doneAt).slice(0, 7) === ym) s.mins += i.minutes; }
+      else { s.open++; if(isDayKey(i.due) && dayDiff(i.due, tk) < 0) s.over++; }
+    });
+  });
+  return s;
+}
+function projectBlock(p, single){
+  var s = projStats(p), total = s.open + s.done;
+  var vis = sortBy(p.tasks.filter(function(t){ return showArchivedTasks || !t.archived; }));
+  var head;
+  if(editKey === 'p:' + p.id){
+    head = el('div', { class:'proj-h' }, [ editForm(p.title, 80, function(v){ renameProject(p.id, v); }) ]);
+  } else {
+    head = el('div', { class:'proj-h' }, [
+      pdot(p),
+      el('h2', { class:'ptitle', text: p.title, title:'Adını düzenlemek için çift tıklayın', ondblclick:function(){ startEdit('p:' + p.id); } }),
+      p.archived ? el('span', { class:'tag', text:'arşiv' }) : null,
+      el('button', { type:'button', class:'btn-s primary', onclick:function(){ addOpen['task:' + p.id] = true; render('task:' + p.id); } }, [ ic('plus', 's'), tx('İş ekle') ]),
+      projectMenu(p)
+    ]);
+  }
+  var nodes = [ head, el('div', { class:'pmeta' }, [
+    el('span', { text: s.open + ' açık' }),
+    el('span', { text: s.done + ' tamamlandı' }),
+    s.over ? el('span', { class:'over' }, [ ic('clock', 's'), tx(s.over + ' geciken') ]) : null,
+    s.mins ? el('span', { title:'Bu ay tamamlanan maddelere girilen çalışma süresi' }, [ ic('clock', 's'), tx('Bu ay ' + fmtMin(s.mins)) ]) : null,
+    el('span', { text: vis.length + ' iş' })
+  ]) ];
+  if(total) nodes.push(el('div', { class:'bar', 'aria-hidden':'true' }, [ el('span', { style:'width:' + Math.round(s.done / total * 100) + '%' }) ]));
+  var info = [ noteBlock(p), (remList(p).length || remOpen[p.id]) ? remindersBlock(p) : null ].filter(Boolean);
+  if(info.length) nodes.push(el('div', { class:'pinfo' }, info));
+  if(!vis.length) nodes.push(el('div', { class:'empty', style:'margin-top:14px', text:'Bu projede henüz iş yok.' }));
+  vis.forEach(function(t){ nodes.push(taskSection(p, t)); });
+  nodes.push(ghostAdd('task:' + p.id, 'İş ekle', 'Yeni iş adı… (örn. Saha Devreye Alma)', 100, function(v){ addTask(p.id, v); }, 'task-add'));
+  return el('div', { class:'proj' + (single ? ' single' : ''), 'data-sid': p.id }, nodes);
+}
+
+/* --- pano görünümü: işler durumlarına göre sütunlarda ------------------- */
+var dragTid = null;
+function findTaskById(tid){
+  for(var a = 0; a < state.projects.length; a++){
+    var p = state.projects[a];
+    for(var b = 0; b < p.tasks.length; b++) if(p.tasks[b].id === tid) return { p:p, t:p.tasks[b] };
+  }
+  return null;
+}
+function boardCard(p, t, multi){
+  var items = t.items.filter(function(i){ return showArchivedTasks || !i.archived; });
+  var done = items.filter(function(i){ return i.done; }).length, tk = todayKey();
+  var over = items.filter(function(i){ return !i.done && isDayKey(i.due) && dayDiff(i.due, tk) < 0; }).length;
+  var urgent = items.filter(function(i){ return !i.done && i.priority === 2; }).length;
+  var isDone = taskIsDone(t);
+  var card = el('div', { class:'bcard', draggable: isDone ? null : 'true', tabindex:'0', role:'button',
+    'aria-label': t.title + ' — listede göster', title:'Listede göstermek için tıklayın' + (isDone ? '' : ' • durumu değiştirmek için başka sütuna sürükleyin'),
+    onclick:function(){ goTask(t.id); },
+    onkeydown:function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goTask(t.id); } } }, [
+    multi ? el('div', { class:'bproj' }, [ pdot(p), tx(p.title) ]) : null,
+    el('h4', { text: t.title }),
+    el('div', { class:'chips' }, [
+      prioChip(t), dueChip(t, isDone),
+      over ? el('span', { class:'due over' }, [ ic('clock', 's'), tx(over + ' geciken') ]) : null,
+      urgent ? el('span', { class:'prio p2' }, [ ic('flag', 's'), tx(urgent + ' acil') ]) : null,
+      el('span', { class:'chip', text: done + '/' + items.length + ' madde' })
+    ]),
+    items.length ? el('div', { class:'bar', 'aria-hidden':'true' }, [ el('span', { style:'width:' + Math.round(done / items.length * 100) + '%' }) ]) : null
+  ]);
+  card.addEventListener('dragstart', function(e){ dragTid = t.id; try { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; } catch(x){} });
+  card.addEventListener('dragend', function(){ dragTid = null; });
+  return card;
+}
+function renderBoard(shown){
+  var cols = [ ['todo','Başlamadı'], ['doing','Devam ediyor'], ['blocked','Bloklu'], ['done','Tamamlandı'] ];
+  var buckets = { todo:[], doing:[], blocked:[], done:[] }, multi = shown.length > 1;
+  shown.forEach(function(p){
+    sortBy(p.tasks).forEach(function(t){
+      if(t.archived && !showArchivedTasks) return;
+      var k = taskIsDone(t) ? 'done' : (buckets[t.status] ? t.status : 'todo');
+      buckets[k].push({ p:p, t:t });
+    });
+  });
+  var board = el('div', { class:'board', 'aria-label':'Pano görünümü' });
+  cols.forEach(function(c){
+    var col = el('div', { class:'bcol', 'data-st': c[0] }, [
+      el('div', { class:'bcolh' }, [ el('span', { class:'stpill st-' + c[0], text: c[1] }), el('span', { class:'tcount', text: String(buckets[c[0]].length) }) ])
+    ]);
+    if(c[0] !== 'done'){
+      col.addEventListener('dragover', function(e){ if(dragTid){ e.preventDefault(); col.classList.add('drop'); } });
+      col.addEventListener('dragleave', function(e){ if(!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
+      col.addEventListener('drop', function(e){
+        e.preventDefault(); col.classList.remove('drop');
+        var x = dragTid && findTaskById(dragTid); dragTid = null;
+        if(x && !taskIsDone(x.t) && x.t.status !== c[0]){ x.t.status = c[0]; commit(); }
+      });
+    }
+    buckets[c[0]].forEach(function(x){ col.appendChild(boardCard(x.p, x.t, multi)); });
+    if(!buckets[c[0]].length) col.appendChild(el('div', { class:'empty', style:'padding:6px 4px', text: c[0] === 'done' ? 'Tamamlanan iş yok.' : 'Buraya iş sürükleyin.' }));
+    board.appendChild(col);
+  });
+  return board;
+}
+
 function renderTasks(){
   var projEl = clear(document.getElementById('projects'));
-  var doneEl = clear(document.getElementById('doneList'));
   renderAgenda();
-
   if(tasksFilter && !findProject(tasksFilter)) tasksFilter = '';
+  var wide = isWide();
+
+  /* araç çubuğu: (dar ekranda proje seçimi) • liste/pano • sıralama • arşiv • diğer */
   var bar = clear(document.getElementById('taskFilterBar'));
-  var fsel = el('select', { 'aria-label':'Proje filtresi', onchange:function(e){ tasksFilter = e.target.value; render(); } },
-    [ el('option', { value:'', text:'Tüm projeler' }) ].concat(state.projects.map(function(p){
-      return el('option', { value:p.id, text: p.title + (p.archived ? ' (arşiv)' : '') });
-    })));
-  fsel.value = tasksFilter;
-  var ssel = el('select', { 'aria-label':'Sıralama', onchange:function(e){ sortMode = e.target.value; lsSet('is-takip-sort', sortMode); render(); } }, [
-    el('option', { value:'manual', text:'Elle sıralama' }),
-    el('option', { value:'prio', text:'Önceliğe göre' }),
-    el('option', { value:'due', text:'Son tarihe göre' })
-  ]);
-  ssel.value = sortMode;
+  if(!wide){
+    var fsel = el('select', { 'aria-label':'Proje', onchange:function(e){ tasksFilter = e.target.value; render(); } },
+      [ el('option', { value:'', text:'Tüm projeler' }) ].concat(state.projects.map(function(p){
+        return el('option', { value:p.id, text: p.title + (p.archived ? ' (arşiv)' : '') });
+      })));
+    fsel.value = tasksFilter;
+    bar.appendChild(fsel);
+  }
+  bar.appendChild(el('span', { class:'sp' }));
+  bar.appendChild(el('div', { class:'seg', role:'group', 'aria-label':'Görünüm' }, [ ['list','Liste','list'], ['board','Pano','board'] ].map(function(v){
+    return el('button', { type:'button', class: viewMode === v[0] ? 'on' : null, 'aria-pressed': viewMode === v[0] ? 'true' : 'false',
+      onclick:function(){ setView(v[0]); render(); } }, [ ic(v[2], 's'), tx(v[1]) ]);
+  })));
+  if(viewMode === 'list'){
+    var ssel = el('select', { 'aria-label':'Sıralama', title:'Sıralama', onchange:function(e){ sortMode = e.target.value; lsSet('is-takip-sort', sortMode); render(); } }, [
+      el('option', { value:'manual', text:'Elle sıralama' }), el('option', { value:'prio', text:'Önceliğe göre' }), el('option', { value:'due', text:'Son tarihe göre' })
+    ]);
+    ssel.value = sortMode;
+    bar.appendChild(ssel);
+  }
   var acb = el('input', { type:'checkbox', id:'showArc' });
   acb.checked = showArchivedTasks;
   acb.addEventListener('change', function(){ showArchivedTasks = acb.checked; render(); });
-  bar.appendChild(el('span', { class:'stats', text:'Proje:' }));
-  bar.appendChild(fsel);
-  bar.appendChild(el('span', { class:'stats', text:'Sırala:' }));
-  bar.appendChild(ssel);
-  bar.appendChild(el('label', { class:'stats', for:'showArc', style:'display:flex;align-items:center;gap:6px;cursor:pointer' }, [ acb, el('span', { text:'Arşivdekileri göster' }) ]));
+  bar.appendChild(el('label', { for:'showArc' }, [ acb, el('span', { text:'Arşivdekiler' }) ]));
+  bar.appendChild(menu([ mBtn('🗄 Tamamlanan maddeleri arşivle', archiveDoneItems) ]));
   bar.hidden = !state.projects.length;
 
   var shown = state.projects.filter(function(p){ return (showArchivedTasks || !p.archived) && (!tasksFilter || p.id === tasksFilter); });
-  if(!state.projects.length) projEl.appendChild(el('div', { class:'empty', text:'Henüz proje yok. Yukarıdan bir proje ekleyerek başlayın.' }));
-  else if(!shown.length) projEl.appendChild(el('div', { class:'empty', text:'Gösterilecek proje yok (arşivde olabilir).' }));
-
-  var doneRows = [];
-  shown.forEach(function(p){
-    var pOpen = 0;
-    var taskNodes = [];
-    var vis = p.tasks.filter(function(t){ return showArchivedTasks || !t.archived; });
-    sortBy(vis).forEach(function(t){
-      var items = t.items.filter(function(i){ return showArchivedTasks || !i.archived; });
-      var open = items.filter(function(i){ return !i.done; });
-      var done = items.filter(function(i){ return i.done; });
-      pOpen += open.length;
-      done.forEach(function(it){ doneRows.push({ p:p, t:t, it:it }); });
-
-      var thead;
-      if(editKey === 't:' + t.id){
-        thead = el('div', { class:'thead' }, [ editForm(t.title, 100, function(v){ renameTask(p.id, t.id, v); }) ]);
-      } else {
-        var isDone = taskIsDone(t);
-        var stsel = null;
-        if(!isDone){
-          stsel = el('select', { class:'tsel st-' + (t.status || 'todo'), 'aria-label':'İş durumu',
-            onchange:function(e){ t.status = e.target.value; commit(); } },
-            TSTATUS.map(function(o){ return el('option', { value:o[0], text:o[1] }); }));
-          stsel.value = t.status || 'todo';
-        }
-        var completeBtn = el('button', { class:'done-btn', text:'✓ İşi Tamamla', title:'Bu işin tüm açık maddelerini tamamla',
-          onclick:function(){ completeTask(p.id, t.id); } });
-        if(!open.length) completeBtn.disabled = true;
-        thead = el('div', { class:'thead' }, [
-          el('h4', { text: t.title }),
-          t.archived ? el('span', { class:'tag', text:'arşiv' }) : null,
-          prioChip(t), dueChip(t, isDone),
-          isDone ? el('span', { class:'count', style:'color:var(--ok)', text:'✓ tamamlandı' }) : stsel,
-          el('span', { class:'count', text: open.length + ' açık' }),
-          completeBtn,
-          taskMenu(p, t)
-        ]);
-      }
-      var ul = el('ul');
-      var ordered = sortBy(open);
-      ordered.forEach(function(it){ ul.appendChild(openRow(p, t, it)); });
-      taskNodes.push(el('div', { class:'task', 'data-sid': t.id }, [
-        thead, noteBlock(t),
-        open.length ? ul : el('div', { class:'empty', text: items.length ? 'Tüm maddeler tamamlandı.' : 'Henüz iş maddesi yok.' }),
-        addForm('Yeni iş maddesi ekle…', 'item:' + t.id, 200, function(v){ addItem(p.id, t.id, v); })
-      ]));
-    });
-
-    var phead;
-    if(editKey === 'p:' + p.id){
-      phead = el('div', { class:'phead' }, [ editForm(p.title, 80, function(v){ renameProject(p.id, v); }) ]);
-    } else {
-      phead = el('div', { class:'phead' }, [
-        el('h3', { text: p.title }),
-        p.archived ? el('span', { class:'tag', text:'arşiv' }) : null,
-        el('span', { class:'count', text: vis.length + ' iş • ' + pOpen + ' açık madde' }),
-        projectMenu(p)
-      ]);
-    }
-    var nodes = [ phead, noteBlock(p), remindersBlock(p) ];
-    if(!vis.length) nodes.push(el('div', { class:'empty', text:'Bu projede henüz iş yok.' }));
-    taskNodes.forEach(function(n){ nodes.push(n); });
-    var tf = addForm('Bu projeye yeni iş ekle…', 'task:' + p.id, 100, function(v){ addTask(p.id, v); }, 'İş Ekle');
-    tf.className += ' addtask';
-    nodes.push(tf);
-    projEl.appendChild(el('div', { class:'project', 'data-sid': p.id }, nodes));
-  });
-
-  /* Tamamlananlar: en yeniden eskiye, sınırlı sayıda */
-  doneRows.sort(function(a, b){ return (b.it.doneAt || 0) - (a.it.doneAt || 0); });
-  var total = doneRows.length;
-  var slice = doneShowAll ? doneRows : doneRows.slice(0, DONE_LIMIT);
-  if(!total) doneEl.appendChild(el('div', { class:'empty', text:'Tamamlanan iş yok.' }));
-  else {
-    var groups = [], idx = {};
-    slice.forEach(function(x){
-      var k = x.p.id + '|' + x.t.id;
-      if(!(k in idx)){ idx[k] = groups.length; groups.push({ p:x.p, t:x.t, rows:[] }); }
-      groups[idx[k]].rows.push(x);
-    });
-    groups.forEach(function(g){
-      var ul = el('ul');
-      g.rows.forEach(function(x){ ul.appendChild(doneRow(g.p, g.t, x.it, false)); });
-      doneEl.appendChild(el('div', { class:'project done-card' }, [
-        el('div', { class:'phead' }, [
-          el('h3', { text: g.p.title }),
-          el('span', { class:'count', text: g.t.title })
-        ]), ul
-      ]));
-    });
-    if(total > slice.length){
-      doneEl.appendChild(el('button', { class:'small', text:'↓ ' + (total - slice.length) + ' tamamlanmış madde daha göster',
-        onclick:function(){ doneShowAll = true; render(); } }));
-    } else if(doneShowAll && total > DONE_LIMIT){
-      doneEl.appendChild(el('button', { class:'small', text:'↑ Listeyi kısalt', onclick:function(){ doneShowAll = false; render(); } }));
-    }
+  if(!state.projects.length){
+    projEl.appendChild(el('div', { class:'empty', style:'margin-top:16px', text: wide ? 'Henüz proje yok. Soldaki "Projeler" başlığının yanındaki + ile ilk projenizi ekleyin.' : 'Henüz proje yok. Yukarıdan bir proje ekleyerek başlayın.' }));
+    return;
   }
+  if(!shown.length){ projEl.appendChild(el('div', { class:'empty', style:'margin-top:16px', text:'Gösterilecek proje yok (arşivde olabilir).' })); return; }
+  if(viewMode === 'board'){ projEl.appendChild(renderBoard(shown)); return; }
+  shown.forEach(function(p){ projEl.appendChild(projectBlock(p, !!tasksFilter)); });
 }
 /* --- Takvim -------------------------------------------------------------- */
 function dayLeaveBox(key){
@@ -4022,13 +4396,20 @@ function findBySid(id){
   for(var i = 0; i < all.length; i++) if(all[i].getAttribute('data-sid') === id) return all[i];
   return null;
 }
+/* Bir proje / iş / maddeye git: o projeyi aç, işi genişlet, madde tamamlanmışsa
+   tamamlananları göster (pano açıksa listeye geçilir) */
 function goTask(sid, pid){
-  tab = 'tasks'; editKey = null; tasksFilter = '';
+  tab = 'tasks'; editKey = null;
+  if(viewMode !== 'list') setView('list');
+  var loc = locateItem(sid), tk = loc || findTaskById(sid);
+  var proj = (tk && tk.p) || findProject(sid) || (pid ? findProject(pid) : null);
+  tasksFilter = proj ? proj.id : '';
+  if(tk && closedTasks[tk.t.id]){ delete closedTasks[tk.t.id]; saveClosed(); }
+  if(loc && loc.it.done) doneOpen[loc.t.id] = true;
   if(pid) remOpen[pid] = true;
   render();
   var node = findBySid(sid);
   if(!node && !showArchivedTasks){ showArchivedTasks = true; render(); node = findBySid(sid); }
-  if(!node && !doneShowAll){ doneShowAll = true; render(); node = findBySid(sid); }
   flashEl(node);
 }
 function gotoRef(ref){
@@ -4185,11 +4566,6 @@ function updateStats(){
   }); }); });
   var over = dueItems().filter(function(x){ return dayDiff(x.due, todayKey()) < 0; }).length;
   document.getElementById('stats').textContent = open + ' açık • ' + done + ' tamamlandı' + (over ? ' • ' + over + ' geciken' : '');
-  if(!isWide()) return;
-  var ss = clear(document.getElementById('sideStats'));
-  [ [open, 'açık'], [done, 'tamamlandı'], over ? [over, 'geciken', true] : null ].forEach(function(s){
-    if(s) ss.appendChild(el('div', { class:'sstat' + (s[2] ? ' alert' : '') }, [ el('div', { class:'v', text:String(s[0]) }), el('div', { class:'l', text:s[1] }) ]));
-  });
 }
 var TABS = ['tasks','cal','dash','alarm','notebook','archive','search'];
 function switchTab(t){
@@ -4288,7 +4664,12 @@ document.getElementById('projectForm').addEventListener('submit', function(e){
   addProject(inp.value);
   inp.value = '';
 });
-document.getElementById('clearDone').addEventListener('click', archiveDoneItems);
+/* sol menü: arama kutusu ve yeni proje */
+document.getElementById('sideSearch').addEventListener('click', function(){ openSearch(); });
+document.getElementById('sideAddProj').addEventListener('click', function(){
+  sideProjAdd = !sideProjAdd; renderSideProjects();
+  var i = document.querySelector('[data-key="side-proj"]'); if(i) i.focus();
+});
 
 /* arama */
 document.getElementById('searchInput').addEventListener('input', function(e){ searchQ = e.target.value; renderSearch(); });
