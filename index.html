@@ -520,6 +520,8 @@
   .bcolh .stpill{cursor:default}
   .bcard{margin-bottom:8px;padding:10px 12px;border:1px solid transparent;border-radius:10px;background:var(--card);box-shadow:var(--shadow-s);cursor:pointer}
   .bcard[draggable="true"]{cursor:grab}
+  .bcard.dragging{opacity:.45}
+  .bmark{height:3px;margin:-3px 2px 5px;border-radius:2px;background:var(--accent)}
   .bcard:hover{border-color:var(--line)}
   .bhead{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
   .bcard h4{flex:1;min-width:0;margin:0;font-size:14px;font-weight:600;word-break:break-word}
@@ -923,6 +925,7 @@ function normItem(raw){
   o.priority = [0,1,2].indexOf(num(o.priority, 0)) >= 0 ? num(o.priority, 0) : 0;
   if(!isDayKey(o.due)) delete o.due;
   if(o.done || (o.status !== 'doing' && o.status !== 'blocked')) delete o.status;
+  if(typeof o.brank !== 'number' || !isFinite(o.brank)) delete o.brank;     /* panodaki sıra (isteğe bağlı) */
   o.archived = num(o.archived, 0) || null;
   return o;
 }
@@ -3476,7 +3479,7 @@ function findTaskById(tid){
 function boardCard(x, multi){
   var p = x.p, t = x.t, it = x.it;
   var card = el('div', { class:'bcard' + (it.done ? ' done' : ''), draggable:'true', tabindex:'0', role:'button', 'data-iid': it.id,
-    'aria-label': it.text + ' (' + t.title + ') — listede göster', title:'Listede göstermek için tıklayın • durumunu değiştirmek için başka sütuna sürükleyin',
+    'aria-label': it.text + ' (' + t.title + ') — listede göster', title:'Listede göstermek için tıklayın • sırasını ya da durumunu değiştirmek için sürükleyin',
     onclick:function(){ goTask(it.id); },
     onkeydown:function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goTask(it.id); } } }, [
     el('div', { class:'bhead' }, [
@@ -3489,9 +3492,24 @@ function boardCard(x, multi){
       : [ prioChip(it), dueChip(it, false), alarmChip(it.id), minChip(it) ])
   ]);
   if(it.note) card.insertBefore(el('div', { class:'bnote', title: it.note }, [ ic('note', 's'), el('span', { text: it.note }) ]), card.lastChild);
-  card.addEventListener('dragstart', function(e){ dragIid = it.id; try { e.dataTransfer.setData('text/plain', it.id); e.dataTransfer.effectAllowed = 'move'; } catch(z){} });
-  card.addEventListener('dragend', function(){ dragIid = null; });
+  card.addEventListener('dragstart', function(e){ dragIid = it.id; card.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', it.id); e.dataTransfer.effectAllowed = 'move'; } catch(z){} });
+  card.addEventListener('dragend', function(){ dragIid = null; card.classList.remove('dragging'); var m = document.querySelector('.bmark'); if(m) m.remove(); });
   return card;
+}
+/* Pano sırası: yalnızca panoda yeri değiştirilen sütunlardaki maddelere "brank" yazılır.
+   Sırası olanlar kendi aralarında, sırası olmayanlar (sonradan eklenenler) altta doğal sırayla. */
+function boardSort(list){
+  list.forEach(function(x, i){ x.n = i; });
+  return list.sort(function(a, b){
+    var ka = typeof a.it.brank === 'number' ? a.it.brank : 1e12 + a.n, kb = typeof b.it.brank === 'number' ? b.it.brank : 1e12 + b.n;
+    return ka - kb;
+  });
+}
+/* fare konumuna göre sütunda kaç kartın üstüne bırakılacağı */
+function boardDropIndex(col, y){
+  var cards = Array.from(col.querySelectorAll('.bcard')).filter(function(c){ return c.getAttribute('data-iid') !== dragIid; });
+  for(var i = 0; i < cards.length; i++){ var r = cards[i].getBoundingClientRect(); if(y < r.top + r.height / 2) return { i:i, cards:cards }; }
+  return { i:cards.length, cards:cards };
 }
 function renderBoard(shown){
   var cols = [ ['todo','Yapılacak'], ['doing','Devam ediyor'], ['blocked','Bloklu'], ['done','Tamamlandı'] ];
@@ -3506,20 +3524,38 @@ function renderBoard(shown){
     });
   });
   buckets.done.sort(function(a, b){ return (b.it.doneAt || 0) - (a.it.doneAt || 0); });
+  ['todo','doing','blocked'].forEach(function(k){ boardSort(buckets[k]); });
   var board = el('div', { class:'board', 'aria-label':'Pano görünümü' });
+  var marker = el('div', { class:'bmark', 'aria-hidden':'true' });
   cols.forEach(function(c){
-    var list = buckets[c[0]];
+    var list = buckets[c[0]], ordered = c[0] !== 'done';      /* Tamamlandı sütunu tarihe göre, elle sıralanmaz */
     var col = el('div', { class:'bcol', 'data-st': c[0] }, [
       el('div', { class:'bcolh' }, [ el('span', { class:'stpill st-' + c[0], text: c[1] }), el('span', { class:'tcount', text: String(list.length) }) ])
     ]);
-    col.addEventListener('dragover', function(e){ if(dragIid){ e.preventDefault(); col.classList.add('drop'); } });
-    col.addEventListener('dragleave', function(e){ if(!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
+    col.addEventListener('dragover', function(e){
+      if(!dragIid) return;
+      e.preventDefault(); col.classList.add('drop');
+      if(!ordered) return;
+      var d = boardDropIndex(col, e.clientY);                  /* bırakılacak yeri ince çizgiyle göster */
+      if(d.i < d.cards.length) col.insertBefore(marker, d.cards[d.i]);
+      else if(d.cards.length) d.cards[d.cards.length - 1].after(marker);
+      else col.querySelector('.bcolh').after(marker);
+    });
+    col.addEventListener('dragleave', function(e){ if(!col.contains(e.relatedTarget)){ col.classList.remove('drop'); if(marker.parentNode === col) marker.remove(); } });
     col.addEventListener('drop', function(e){
-      e.preventDefault(); col.classList.remove('drop');
-      var loc = dragIid && locateItem(dragIid); dragIid = null;
+      e.preventDefault(); col.classList.remove('drop'); marker.remove();
+      var id = dragIid, loc = id && locateItem(id);
+      var d = ordered ? boardDropIndex(col, e.clientY) : null;   /* sürüklenen kart hariç; dragIid temizlenmeden önce */
+      dragIid = null;
       if(!loc) return;
-      var cur = loc.it.done ? 'done' : (loc.it.status || 'todo');
-      if(cur !== c[0]) setItemStatus(loc.it, c[0]);
+      if(!ordered){ if(!loc.it.done) setItemStatus(loc.it, 'done'); return; }
+      var ids = d.cards.map(function(cd){ return cd.getAttribute('data-iid'); });
+      ids.splice(d.i, 0, id);
+      var it = loc.it;
+      if(it.done){ it.done = false; it.doneAt = null; }
+      if(c[0] === 'doing' || c[0] === 'blocked') it.status = c[0]; else delete it.status;
+      ids.forEach(function(x, i){ var l = locateItem(x); if(l) l.it.brank = (i + 1) * 1000; });
+      commit();
     });
     var shownList = c[0] === 'done' ? list.slice(0, BOARD_DONE_LIMIT) : list;
     shownList.forEach(function(x){ col.appendChild(boardCard(x, multi)); });
