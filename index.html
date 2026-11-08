@@ -343,6 +343,12 @@
   .qnote{display:flex;flex-direction:column;gap:6px}
   .qnote textarea{width:100%;min-height:72px}
   .qnote .hintx{font-size:12px;color:var(--muted)}
+  /* Proje şablonları */
+  .tplpanel .mgrid{align-items:end}
+  .tplpanel .mfield input[type=checkbox]{width:auto;padding:0}
+  .tpllist li{align-items:center}
+  .tplprev{flex:1 0 100%;padding:4px 0 6px}
+  .tplprev .task{margin-top:8px}
   /* 24 saatlik tarih + saat girişi */
   .dtpick{display:inline-flex;gap:6px;align-items:center;flex:0 0 auto;max-width:100%}
   .dtpick input[type=date]{flex:1 1 auto;width:auto;min-width:0}
@@ -409,6 +415,7 @@
       <input type="text" id="projectInput" placeholder="Yeni proje adı (örn. Web Sitesi Yenileme)" maxlength="80" autocomplete="off" aria-label="Yeni proje adı">
       <button class="primary" type="submit">Proje Ekle</button>
     </form>
+    <div id="tplBox"></div>
     <div class="dashbar" id="taskFilterBar"></div>
     <div class="layout">
       <section aria-label="Devam eden işler">
@@ -653,7 +660,7 @@ function renderNotice(){
 var migrationInfo = null;     /* { from, projects, tasks, items } */
 
 function emptyState(){
-  return { schemaVersion: SCHEMA, projects: [], weekly: {}, leave: { days:{}, notes:{}, ledger:[], adjust:0 }, alarms: [], notebook: [], trash: [] };
+  return { schemaVersion: SCHEMA, projects: [], weekly: {}, leave: { days:{}, notes:{}, ledger:[], adjust:0 }, alarms: [], notebook: [], templates: [], trash: [] };
 }
 
 function normItem(raw){
@@ -794,6 +801,36 @@ function normNotebook(raw){
     return (x.title.trim() || x.body.trim()) ? x : null;
   }).filter(Boolean);
 }
+/* Proje şablonları: iş/madde iskeleti; "offset" = projenin başlangıcından kaç gün sonra son tarih */
+function normTemplates(raw){
+  function off(v){ var n = num(v, NaN); return isFinite(n) ? Math.round(n) : undefined; }
+  function pri(v){ var n = num(v, 0); return [0,1,2].indexOf(n) >= 0 ? n : 0; }
+  return (Array.isArray(raw) ? raw : []).map(function(t){
+    if(!t || typeof t !== 'object') return null;
+    var x = Object.assign({}, t);
+    x.id = str(x.id) || uid();
+    x.title = str(x.title).trim() || 'Adsız şablon';
+    x.createdAt = okTime(x.createdAt);
+    x.updatedAt = okTime(x.updatedAt) || x.createdAt;
+    if(str(x.note).trim()) x.note = str(x.note); else delete x.note;
+    x.reminders = (Array.isArray(x.reminders) ? x.reminders : []).map(str).filter(function(s){ return s.trim(); });
+    x.tasks = (Array.isArray(x.tasks) ? x.tasks : []).map(function(tk){
+      if(!tk || typeof tk !== 'object') return null;
+      var y = { title: str(tk.title).trim() || 'Adsız iş', priority: pri(tk.priority), offset: off(tk.offset) };
+      if(str(tk.note).trim()) y.note = str(tk.note);
+      y.items = (Array.isArray(tk.items) ? tk.items : []).map(function(it){
+        if(!it || typeof it !== 'object' || !str(it.text).trim()) return null;
+        var z = { text: str(it.text), priority: pri(it.priority), offset: off(it.offset) };
+        if(str(it.note).trim()) z.note = str(it.note);
+        if(z.offset === undefined) delete z.offset;
+        return z;
+      }).filter(Boolean);
+      if(y.offset === undefined) delete y.offset;
+      return y;
+    }).filter(Boolean);
+    return x;
+  }).filter(Boolean);
+}
 function normTrash(raw){
   var cut = Date.now() - TRASH_DAYS * 86400000;
   return (Array.isArray(raw) ? raw : []).map(function(t){
@@ -817,6 +854,7 @@ function normalize(raw){
   out.leave = normLeave(s.leave);
   out.alarms = normAlarms(s.alarms);
   out.notebook = normNotebook(s.notebook);
+  out.templates = normTemplates(s.templates);
   out.trash = normTrash(s.trash);
   out.schemaVersion = SCHEMA;
   var nt = 0, ni = 0;
@@ -833,7 +871,7 @@ function dataSummary(s){
          Object.keys(s.leave && s.leave.days || {}).length + ' izin günü';
 }
 function isEmptyState(s){
-  return !(s && ((s.projects || []).length || (s.alarms || []).length || (s.notebook || []).length ||
+  return !(s && ((s.projects || []).length || (s.alarms || []).length || (s.notebook || []).length || (s.templates || []).length ||
     Object.keys(s.weekly || {}).length || Object.keys((s.leave && s.leave.days) || {}).length ||
     ((s.leave && s.leave.ledger) || []).length));
 }
@@ -1633,7 +1671,7 @@ function sameVisibility(a, b){ return (!a.archived) === (!b.archived); }
 function sameItemGroup(a, b){ return !!a.done === !!b.done && (!a.archived) === (!b.archived); }
 
 /* --- çöp kutusu (30 gün) ------------------------------------------------- */
-var KIND_LABEL = { project:'Proje', task:'İş', item:'Madde', reminder:'Hatırlatma', weekly:'Haftalık plan', alarm:'Hatırlatıcı', leaveday:'İzin günü', ledger:'İzin hareketi', note:'Not' };
+var KIND_LABEL = { project:'Proje', task:'İş', item:'Madde', reminder:'Hatırlatma', weekly:'Haftalık plan', alarm:'Hatırlatıcı', leaveday:'İzin günü', ledger:'İzin hareketi', note:'Not', template:'Şablon' };
 function trashPush(kind, label, data, loc){
   if(!Array.isArray(state.trash)) state.trash = [];
   var entry = { id: uid(), at: Date.now(), kind: kind, label: snip(label, 90), data: clone(data), loc: loc || {} };
@@ -1670,6 +1708,11 @@ function restoreTrash(id, quiet){
     if(e.data.note) state.leave.notes[e.data.key] = e.data.note;
   } else if(e.kind === 'ledger') state.leave.ledger.push(e.data);
   else if(e.kind === 'note') ins(noteList(), e.loc.index, e.data);
+  else if(e.kind === 'template'){
+    /* üzerine yazılmış bir şablonun eski hali: aynı kimlikli güncel hali değiştirir */
+    var ti = tplList().findIndex(function(x){ return x.id === e.data.id; });
+    if(ti >= 0) tplList()[ti] = e.data; else ins(tplList(), e.loc.index, e.data);
+  }
   if(!ok){ toast('Geri yüklenemedi. ' + where, { bad:true }); return; }
   state.trash.splice(i, 1);
   commit();
@@ -1984,6 +2027,105 @@ function deleteNote(id){
   var i = list.findIndex(function(x){ return x.id === id; });
   if(i < 0) return;
   var e = trashPush('note', noteLabel(list[i]), list[i], { index:i });
+  list.splice(i, 1);
+  commit();
+  deletedToast(e);
+}
+
+/* --- proje şablonları ---------------------------------------------------- */
+function tplList(){ if(!Array.isArray(state.templates)) state.templates = []; return state.templates; }
+function tplCounts(tp){
+  var ni = 0, dated = false;
+  tp.tasks.forEach(function(t){ ni += t.items.length; if(isFinite(t.offset)) dated = true; t.items.forEach(function(i){ if(isFinite(i.offset)) dated = true; }); });
+  return { tasks: tp.tasks.length, items: ni, dated: dated };
+}
+/* Projeden şablon: arşivlenmemiş iş ve maddeler alınır; son tarihler,
+   projedeki en erken son tarihe göre gün farkı olarak saklanır. */
+function projectToTemplate(p, name){
+  var dues = [];
+  p.tasks.forEach(function(t){
+    if(t.archived) return;
+    if(isDayKey(t.due)) dues.push(t.due);
+    t.items.forEach(function(i){ if(!i.archived && isDayKey(i.due)) dues.push(i.due); });
+  });
+  var base = dues.sort()[0];
+  function off(due){ return (base && isDayKey(due)) ? dayDiff(due, base) : undefined; }
+  var now = Date.now();
+  var tp = { id: uid(), title: name, createdAt: now, updatedAt: now,
+    reminders: remList(p).map(function(r){ return r.text; }),
+    tasks: activeTasks(p).map(function(t){
+      var y = { title: t.title, priority: t.priority || 0, offset: off(t.due),
+        items: t.items.filter(function(i){ return !i.archived; }).map(function(i){
+          var z = { text: i.text, priority: i.priority || 0, offset: off(i.due) };
+          if(i.note) z.note = i.note;
+          return z;
+        }) };
+      if(t.note) y.note = t.note;
+      return y;
+    }) };
+  if(p.note) tp.note = p.note;
+  return normTemplates([tp])[0];
+}
+function saveAsTemplate(pid, name){
+  var p = findProject(pid); name = str(name).trim();
+  if(!p || !name) return;
+  var list = tplList();
+  var tp = projectToTemplate(p, name);
+  var i = list.findIndex(function(x){ return fold(x.title) === fold(name); });
+  if(i >= 0){
+    if(!confirm('"' + list[i].title + '" adlı bir şablon zaten var.\n\nBu projenin içeriğiyle güncellensin mi? (Eski hali çöp kutusundan geri alınabilir.)')) return;
+    var old = list[i];
+    var e = trashPush('template', old.title, old, { index:i });
+    tp.id = old.id; tp.createdAt = old.createdAt;
+    list[i] = tp;
+    commit();
+    toast('"' + tp.title + '" şablonu güncellendi.', { actionLabel:'↩ Geri al', action:function(){ restoreTrash(e.id, true); } });
+    return;
+  }
+  list.push(tp);
+  commit();
+  var c = tplCounts(tp);
+  toast('"' + tp.title + '" şablon olarak kaydedildi: ' + c.tasks + ' iş, ' + c.items + ' madde.', {
+    actionLabel:'📑 Şablonlar', action:function(){ tplOpen = true; tplForm.tid = tp.id; switchTab('tasks'); render(); flashEl(document.getElementById('tplBox')); } });
+}
+function createFromTemplate(tid, name, startKey, withDates){
+  var tp = tplList().find(function(x){ return x.id === tid; });
+  name = str(name).trim();
+  if(!tp || !name) return null;
+  var now = Date.now();
+  function due(o){ return (withDates && isDayKey(startKey) && isFinite(o)) ? shiftKey(startKey, o) : null; }
+  var p = { id: uid(), title: name, createdAt: now, archived: null,
+    reminders: tp.reminders.map(function(text){ return { id: uid(), text: text, createdAt: now }; }),
+    tasks: tp.tasks.map(function(t){
+      var nt = { id: uid(), title: t.title, createdAt: now, status:'todo', priority: t.priority || 0, archived: null,
+        items: t.items.map(function(i){
+          var ni = { id: uid(), text: i.text, done: false, createdAt: now, doneAt: null, priority: i.priority || 0, archived: null };
+          if(i.note) ni.note = i.note;
+          var d = due(i.offset); if(d) ni.due = d;
+          return ni;
+        }) };
+      if(t.note) nt.note = t.note;
+      var d = due(t.offset); if(d) nt.due = d;
+      return nt;
+    }) };
+  if(tp.note) p.note = tp.note;
+  state.projects.push(p);
+  tasksFilter = '';
+  commit();
+  var ni = 0; p.tasks.forEach(function(t){ ni += t.items.length; });
+  toast('"' + p.title + '" projesi "' + tp.title + '" şablonundan oluşturuldu: ' + p.tasks.length + ' iş, ' + ni + ' madde.', {
+    actionLabel:'↩ Geri al', action:function(){
+      var k = state.projects.findIndex(function(x){ return x.id === p.id; });
+      if(k >= 0){ state.projects.splice(k, 1); commit(); }
+    } });
+  return p;
+}
+function renameTemplate(id, v){ var tp = tplList().find(function(x){ return x.id === id; }); if(tp){ tp.title = v; tp.updatedAt = Date.now(); commit(); } }
+function deleteTemplate(id){
+  var list = tplList();
+  var i = list.findIndex(function(x){ return x.id === id; });
+  if(i < 0) return;
+  var e = trashPush('template', list[i].title, list[i], { index:i });
   list.splice(i, 1);
   commit();
   deletedToast(e);
@@ -2687,6 +2829,7 @@ function projectMenu(p){
   return menu([
     mBtn(p.note ? '📝 Notu düzenle' : '📝 Not ekle', function(){ startEdit('n:' + p.id); }),
     mBtn('✎ Adını düzenle', function(){ startEdit('p:' + p.id); }),
+    mBtn('📑 Şablon olarak kaydet', function(){ startEdit('ts:' + p.id); }),
     mSep(),
     canMove(state.projects, p.id, -1, sameVisibility) ? mBtn('▲ Yukarı taşı', function(){ moveProject(p.id, -1); }) : null,
     canMove(state.projects, p.id, 1, sameVisibility) ? mBtn('▼ Aşağı taşı', function(){ moveProject(p.id, 1); }) : null,
@@ -2694,10 +2837,119 @@ function projectMenu(p){
     mBtn('🗑 Sil', function(){ deleteProject(p.id); }, 'del')
   ]);
 }
+/* --- Şablonlar paneli ---------------------------------------------------- */
+var tplOpen = false, tplPreview = {};
+var tplForm = { tid:'', name:'', start:'', dates:true };
+function tplPreviewList(tp){
+  var box = el('div', { class:'tplprev' });
+  if(tp.note) box.appendChild(el('div', { class:'note', text: tp.note }));
+  if(tp.reminders.length) box.appendChild(el('div', { class:'stats', text:'📌 ' + tp.reminders.length + ' proje hatırlatması' }));
+  tp.tasks.forEach(function(t){
+    var ul = el('ul');
+    t.items.forEach(function(i){
+      ul.appendChild(el('li', null, [
+        prioChip(i), el('span', { class:'txt', text: i.text }),
+        isFinite(i.offset) ? el('span', { class:'tag', title:'Başlangıçtan ' + i.offset + ' gün sonra', text:'+' + i.offset + ' g' }) : null
+      ]));
+    });
+    box.appendChild(el('div', { class:'task' }, [
+      el('div', { class:'thead' }, [ el('h4', { text: t.title }), prioChip(t),
+        isFinite(t.offset) ? el('span', { class:'tag', text:'+' + t.offset + ' g' }) : null,
+        el('span', { class:'count', text: t.items.length + ' madde' }) ]),
+      t.items.length ? ul : el('div', { class:'empty', text:'Madde yok.' })
+    ]));
+  });
+  if(!tp.tasks.length) box.appendChild(el('div', { class:'empty', text:'Bu şablonda iş yok.' }));
+  return box;
+}
+function renderTemplates(){
+  var box = clear(document.getElementById('tplBox'));
+  var list = tplList();
+  var det = el('details', { class:'manual tplpanel' });
+  if(tplOpen || (editKey && editKey.indexOf('tr:') === 0)) det.setAttribute('open', '');
+  det.addEventListener('toggle', function(){ tplOpen = det.open; });
+  det.appendChild(el('summary', null, [ el('span', { text:'📑 Proje şablonları' }), el('span', { class:'count', text: String(list.length) }) ]));
+
+  if(!list.length){
+    det.appendChild(el('div', { class:'empty', style:'margin-top:10px', text:'Henüz şablon yok. Sık tekrarlanan bir projenin ⋯ menüsünden "📑 Şablon olarak kaydet" diyerek oluşturun; sonra yeni projeleri buradan tek tıkla o kalıptan açabilirsiniz.' }));
+    box.appendChild(det);
+    return;
+  }
+
+  /* şablondan proje oluşturma formu */
+  if(!list.some(function(x){ return x.id === tplForm.tid; })) tplForm.tid = list[0].id;
+  if(!isDayKey(tplForm.start)) tplForm.start = todayKey();
+  var cur = list.find(function(x){ return x.id === tplForm.tid; });
+  var sel = el('select', { 'aria-label':'Şablon' }, list.map(function(x){ return el('option', { value:x.id, text:x.title }); }));
+  sel.value = tplForm.tid;
+  sel.addEventListener('change', function(){ tplForm.tid = sel.value; renderTemplates(); });
+  var nameI = el('input', { type:'text', maxlength:'80', autocomplete:'off', placeholder:'Yeni proje adı (örn. KKB-3 Su Arıtma)', 'aria-label':'Yeni proje adı', 'data-key':'tpl-name' });
+  nameI.value = tplForm.name;
+  nameI.addEventListener('input', function(){ tplForm.name = nameI.value; err.textContent = ''; });
+  var startI = el('input', { type:'date', 'aria-label':'Başlangıç tarihi' });
+  startI.value = tplForm.start;
+  startI.addEventListener('change', function(){ tplForm.start = startI.value; err.textContent = ''; });
+  var c = tplCounts(cur);
+  var dcb = el('input', { type:'checkbox', id:'tplDates' });
+  dcb.checked = tplForm.dates;
+  dcb.addEventListener('change', function(){ tplForm.dates = dcb.checked; });
+  var err = el('span', { class:'err' });
+  det.appendChild(el('form', { class:'mgrid', onsubmit:function(e){
+    e.preventDefault();
+    if(!nameI.value.trim()){ err.textContent = 'Yeni proje için bir ad yazın.'; nameI.focus(); return; }
+    if(c.dated && tplForm.dates && !isDayKey(startI.value)){ err.textContent = 'Geçerli bir başlangıç tarihi seçin.'; return; }
+    var p = createFromTemplate(sel.value, nameI.value, startI.value, c.dated && tplForm.dates);
+    if(!p) return;
+    tplForm.name = ''; tplOpen = false;
+    render();
+    flashEl(findBySid(p.id));
+  } }, [
+    el('div', { class:'mfield' }, [ el('label', { text:'Şablon' }), sel ]),
+    el('div', { class:'mfield' }, [ el('label', { text:'Yeni proje adı' }), nameI ]),
+    c.dated ? el('div', { class:'mfield' }, [ el('label', { text:'Başlangıç tarihi' }), startI ]) : null,
+    el('div', { class:'mfield wide' }, [
+      el('span', { class:'stats', text: c.tasks + ' iş, ' + c.items + ' madde' + (c.dated ? '' : ' • bu şablonda son tarih yok') }),
+      c.dated ? el('label', { for:'tplDates', style:'display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)' }, [ dcb, el('span', { text:'Son tarihleri başlangıç tarihine göre hesapla' }) ]) : null
+    ]),
+    el('div', { class:'mactions', style:'grid-column:1/-1;margin-top:0' }, [
+      el('button', { type:'submit', class:'primary', text:'Şablondan proje oluştur' }), err
+    ])
+  ]));
+
+  /* şablon listesi */
+  var ul = el('ul', { class:'tpllist' });
+  list.forEach(function(tp){
+    var cc = tplCounts(tp);
+    if(editKey === 'tr:' + tp.id){
+      ul.appendChild(el('li', null, [ editForm(tp.title, 80, function(v){ renameTemplate(tp.id, v); }) ]));
+      return;
+    }
+    var li = el('li', { 'data-sid': tp.id }, [
+      el('span', { class:'txt', style:'font-weight:600', text: tp.title }),
+      el('span', { class:'count', text: cc.tasks + ' iş • ' + cc.items + ' madde' + (cc.dated ? ' • tarihli' : '') }),
+      tp.updatedAt ? el('span', { class:'created-tag', title:'Son güncelleme', text: fmt(tp.updatedAt) }) : null,
+      el('button', { type:'button', class:'small', 'aria-expanded': tplPreview[tp.id] ? 'true' : 'false',
+        text: tplPreview[tp.id] ? '▾ Gizle' : '▸ İçeriği gör', onclick:function(){ tplPreview[tp.id] = !tplPreview[tp.id]; renderTemplates(); } }),
+      menu([
+        mBtn('➕ Bu şablondan proje oluştur', function(){ tplForm.tid = tp.id; renderTemplates(); var n = document.querySelector('[data-key="tpl-name"]'); if(n) n.focus(); }),
+        mBtn('✎ Adını değiştir', function(){ startEdit('tr:' + tp.id); }),
+        mSep(),
+        mBtn('🗑 Sil', function(){ deleteTemplate(tp.id); }, 'del')
+      ])
+    ]);
+    if(tplPreview[tp.id]) li.appendChild(tplPreviewList(tp));
+    ul.appendChild(li);
+  });
+  det.appendChild(el('h2', { style:'margin:16px 0 4px', text:'Kayıtlı şablonlar' }));
+  det.appendChild(ul);
+  det.appendChild(el('div', { class:'stats', style:'margin-top:8px', text:'Bir şablonu değiştirmek için: şablondan proje oluşturun, projeyi düzenleyin, sonra ⋯ menüsünden aynı adla tekrar "Şablon olarak kaydet" deyin.' }));
+  box.appendChild(det);
+}
 function renderTasks(){
   var projEl = clear(document.getElementById('projects'));
   var doneEl = clear(document.getElementById('doneList'));
   renderAgenda();
+  renderTemplates();
 
   if(tasksFilter && !findProject(tasksFilter)) tasksFilter = '';
   var bar = clear(document.getElementById('taskFilterBar'));
@@ -2776,6 +3028,11 @@ function renderTasks(){
     var phead;
     if(editKey === 'p:' + p.id){
       phead = el('div', { class:'phead' }, [ editForm(p.title, 80, function(v){ renameProject(p.id, v); }) ]);
+    } else if(editKey === 'ts:' + p.id){
+      phead = el('div', { class:'phead' }, [
+        el('span', { class:'stats', style:'flex:1 0 100%', text:'📑 Şablon adı — bu projenin işleri ve maddeleri şablona kopyalanır (tamamlanma durumu ve süreler alınmaz):' }),
+        editForm(p.title, 80, function(v){ saveAsTemplate(p.id, v); })
+      ]);
     } else {
       phead = el('div', { class:'phead' }, [
         el('h3', { text: p.title }),
