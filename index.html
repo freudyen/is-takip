@@ -496,6 +496,7 @@
 
   /* pano */
   .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-top:18px}
+  .proj.board-head{margin-bottom:0}
   @media (max-width:900px){ .board{grid-template-columns:repeat(2,minmax(0,1fr))} }
   .bcol{min-height:140px;padding:10px;border-radius:12px;background:var(--sub)}
   .bcol.drop{outline:2px dashed var(--accent);outline-offset:-2px}
@@ -504,7 +505,12 @@
   .bcard{margin-bottom:8px;padding:10px 12px;border:1px solid transparent;border-radius:10px;background:var(--card);box-shadow:var(--shadow-s);cursor:pointer}
   .bcard[draggable="true"]{cursor:grab}
   .bcard:hover{border-color:var(--line)}
-  .bcard h4{margin:0 0 6px;font-size:14px;word-break:break-word}
+  .bhead{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+  .bcard h4{flex:1;min-width:0;margin:0;font-size:14px;font-weight:600;word-break:break-word}
+  .bcat{flex:0 1 auto;max-width:45%;margin-top:1px;padding:1px 7px;border-radius:6px;background:var(--sub);font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bcard.done h4{text-decoration:line-through;color:var(--faint);font-weight:500}
+  .bcard .chips:empty{display:none}
+  .stpill.sm{padding:1px 8px 1px 17px;font-size:11px;background-position:0 0;background-image:radial-gradient(circle at 9px 50%, currentColor 2.6px, transparent 3.2px)}
   .bproj{display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:12px;color:var(--faint)}
   .bcard .chips{justify-content:flex-start}
   .bcard .bar{margin-top:10px}
@@ -636,6 +642,8 @@ var MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağust
 var DOW = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
 var PRIO = { 0:'', 1:'Önemli', 2:'Acil' };
 var TSTATUS = [ ['todo','Başlamadı'], ['doing','Devam ediyor'], ['blocked','Bloklu'] ];
+/* madde durumu: yalnızca "doing" / "blocked" yazılır; alan yoksa "Yapılacak", tamamlanınca silinir */
+var ISTATUS = [ ['todo','Yapılacak'], ['doing','Devam ediyor'], ['blocked','Bloklu'] ];
 var WSTATUS = [ ['planned','Bekliyor'], ['done','Tamamlandı'], ['postponed','Ertelendi'], ['failed','Yapılamadı'], ['cancelled','İptal oldu'] ];
 var LEAVE_TYPES = { weekend:'Hafta sonu çalışması', holiday:'Resmi tatil çalışması' };
 
@@ -841,6 +849,7 @@ function normItem(raw){
   if(str(o.note).trim()) o.note = str(o.note); else delete o.note;
   o.priority = [0,1,2].indexOf(num(o.priority, 0)) >= 0 ? num(o.priority, 0) : 0;
   if(!isDayKey(o.due)) delete o.due;
+  if(o.done || (o.status !== 'doing' && o.status !== 'blocked')) delete o.status;
   o.archived = num(o.archived, 0) || null;
   return o;
 }
@@ -2097,11 +2106,11 @@ function completeTask(pid, tid){
   var open = t.items.filter(function(i){ return !i.done; });
   if(!open.length) return;
   if(open.length > 1 && !confirm('"' + snip(t.title, 60) + '" işindeki ' + open.length + ' açık madde tamamlandı olarak işaretlensin mi?')) return;
-  var now = Date.now();
-  open.forEach(function(i){ i.done = true; i.doneAt = now; });
+  var now = Date.now(), prevStatus = open.map(function(i){ return i.status; });
+  open.forEach(function(i){ i.done = true; i.doneAt = now; delete i.status; });
   commit();
   toast(open.length + ' madde tamamlandı.', { actionLabel:'↩ Geri al', action:function(){
-    open.forEach(function(i){ i.done = false; i.doneAt = null; });
+    open.forEach(function(i, k){ i.done = false; i.doneAt = null; if(prevStatus[k]) i.status = prevStatus[k]; });
     commit();
   } });
 }
@@ -2118,6 +2127,15 @@ function editItem(pid, tid, iid, v){ var i = findItem(pid, tid, iid); if(i){ i.t
 function setDone(pid, tid, iid, done){
   var i = findItem(pid, tid, iid); if(!i) return;
   i.done = done; i.doneAt = done ? Date.now() : null;
+  if(done) delete i.status;
+  commit();
+}
+function setItemStatus(it, st){
+  if(st === 'done'){ if(!it.done){ it.done = true; it.doneAt = Date.now(); } delete it.status; }
+  else {
+    if(it.done){ it.done = false; it.doneAt = null; }
+    if(st === 'doing' || st === 'blocked') it.status = st; else delete it.status;
+  }
   commit();
 }
 function deleteItem(pid, tid, iid){
@@ -2936,12 +2954,25 @@ function mDue(o){
   return el('div', { class:'mrow' }, [ el('label', { text:'📅 Son tarih' }), inp ]);
 }
 function mSep(){ return el('hr'); }
+function mItemStatus(it){
+  var sel = el('select', { 'aria-label':'Durum' }, ISTATUS.map(function(o){ return el('option', { value:o[0], text:o[1] }); }));
+  sel.value = it.status || 'todo';
+  sel.addEventListener('change', function(){ setItemStatus(it, sel.value); });
+  return el('div', { class:'mrow' }, [ el('label', { text:'◐ Durum' }), sel ]);
+}
+/* listede "Devam ediyor" / "Bloklu" maddeler küçük bir etiketle görünür */
+function itemStatusChip(it){
+  if(it.done || !it.status) return null;
+  var lbl = (ISTATUS.filter(function(o){ return o[0] === it.status; })[0] || [])[1];
+  return lbl ? el('span', { class:'stpill sm st-' + it.status, text: lbl }) : null;
+}
 
 /* --- madde satırları ----------------------------------------------------- */
 function itemMenu(p, t, it){
   return menu([
     mBtn(it.note ? '📝 Notu düzenle' : '📝 Not ekle', function(){ startEdit('n:' + it.id); }),
     mBtn('✎ Metni düzenle', function(){ startEdit('i:' + it.id); }),
+    it.done ? null : mItemStatus(it),
     mPrio(it), mDue(it),
     mBtn('⏱ Çalışma süresi', function(){ startEdit('m:' + it.id); }),
     it.done ? mBtn('🕒 Tamamlanma tarihi', function(){ startEdit('d:' + it.id); }) : null,
@@ -3000,7 +3031,7 @@ function openRow(p, t, it){
   return el('li', { class:'row', 'data-sid': it.id }, [
     itemCk(p, t, it),
     rowText(it),
-    el('div', { class:'chips' }, [ prioChip(it), dueChip(it, false), alarmChip(it.id), minChip(it) ]),
+    el('div', { class:'chips' }, [ itemStatusChip(it), prioChip(it), dueChip(it, false), alarmChip(it.id), minChip(it) ]),
     itemMenu(p, t, it),
     editKey === 'n:' + it.id ? noteForm(it) : null,
     editKey === 'm:' + it.id ? durForm(it) : null,
@@ -3236,9 +3267,10 @@ function projStats(p){
   });
   return s;
 }
-function projectBlock(p, single){
+/* proje başlığı + özet + ilerleme çubuğu (liste ve pano görünümünde ortak) */
+function projectHead(p){
   var s = projStats(p), total = s.open + s.done;
-  var vis = sortBy(p.tasks.filter(function(t){ return showArchivedTasks || !t.archived; }));
+  var nTasks = p.tasks.filter(function(t){ return showArchivedTasks || !t.archived; }).length;
   var head;
   if(editKey === 'p:' + p.id){
     head = el('div', { class:'proj-h' }, [ editForm(p.title, 80, function(v){ renameProject(p.id, v); }) ]);
@@ -3247,7 +3279,11 @@ function projectBlock(p, single){
       pdot(p),
       el('h2', { class:'ptitle', text: p.title, title:'Adını düzenlemek için çift tıklayın', ondblclick:function(){ startEdit('p:' + p.id); } }),
       p.archived ? el('span', { class:'tag', text:'arşiv' }) : null,
-      el('button', { type:'button', class:'btn-s primary', onclick:function(){ addOpen['task:' + p.id] = true; render('task:' + p.id); } }, [ ic('plus', 's'), tx('İş ekle') ]),
+      el('button', { type:'button', class:'btn-s primary', onclick:function(){
+        addOpen['task:' + p.id] = true;
+        if(viewMode !== 'list') setView('list');           /* yazma alanı liste görünümünde */
+        render('task:' + p.id);
+      } }, [ ic('plus', 's'), tx('İş ekle') ]),
       projectMenu(p)
     ]);
   }
@@ -3256,9 +3292,14 @@ function projectBlock(p, single){
     el('span', { text: s.done + ' tamamlandı' }),
     s.over ? el('span', { class:'over' }, [ ic('clock', 's'), tx(s.over + ' geciken') ]) : null,
     s.mins ? el('span', { title:'Bu ay tamamlanan maddelere girilen çalışma süresi' }, [ ic('clock', 's'), tx('Bu ay ' + fmtMin(s.mins)) ]) : null,
-    el('span', { text: vis.length + ' iş' })
+    el('span', { text: nTasks + ' iş' })
   ]) ];
   if(total) nodes.push(el('div', { class:'bar', 'aria-hidden':'true' }, [ el('span', { style:'width:' + Math.round(s.done / total * 100) + '%' }) ]));
+  return nodes;
+}
+function projectBlock(p, single){
+  var vis = sortBy(p.tasks.filter(function(t){ return showArchivedTasks || !t.archived; }));
+  var nodes = projectHead(p);
   var info = [ noteBlock(p), (remList(p).length || remOpen[p.id]) ? remindersBlock(p) : null ].filter(Boolean);
   if(info.length) nodes.push(el('div', { class:'pinfo' }, info));
   if(!vis.length) nodes.push(el('div', { class:'empty', style:'margin-top:14px', text:'Bu projede henüz iş yok.' }));
@@ -3267,8 +3308,9 @@ function projectBlock(p, single){
   return el('div', { class:'proj' + (single ? ' single' : ''), 'data-sid': p.id }, nodes);
 }
 
-/* --- pano görünümü: işler durumlarına göre sütunlarda ------------------- */
-var dragTid = null;
+/* --- pano görünümü: maddeler durumlarına göre sütunlarda; kartın kenarında
+   ait olduğu kategori (iş başlığı) yazar ------------------------------------ */
+var dragIid = null, BOARD_DONE_LIMIT = 30;
 function findTaskById(tid){
   for(var a = 0; a < state.projects.length; a++){
     var p = state.projects[a];
@@ -3276,56 +3318,58 @@ function findTaskById(tid){
   }
   return null;
 }
-function boardCard(p, t, multi){
-  var items = t.items.filter(function(i){ return showArchivedTasks || !i.archived; });
-  var done = items.filter(function(i){ return i.done; }).length, tk = todayKey();
-  var over = items.filter(function(i){ return !i.done && isDayKey(i.due) && dayDiff(i.due, tk) < 0; }).length;
-  var urgent = items.filter(function(i){ return !i.done && i.priority === 2; }).length;
-  var isDone = taskIsDone(t);
-  var card = el('div', { class:'bcard', draggable: isDone ? null : 'true', tabindex:'0', role:'button',
-    'aria-label': t.title + ' — listede göster', title:'Listede göstermek için tıklayın' + (isDone ? '' : ' • durumu değiştirmek için başka sütuna sürükleyin'),
-    onclick:function(){ goTask(t.id); },
-    onkeydown:function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goTask(t.id); } } }, [
-    multi ? el('div', { class:'bproj' }, [ pdot(p), tx(p.title) ]) : null,
-    el('h4', { text: t.title }),
-    el('div', { class:'chips' }, [
-      prioChip(t), dueChip(t, isDone),
-      over ? el('span', { class:'due over' }, [ ic('clock', 's'), tx(over + ' geciken') ]) : null,
-      urgent ? el('span', { class:'prio p2' }, [ ic('flag', 's'), tx(urgent + ' acil') ]) : null,
-      el('span', { class:'chip', text: done + '/' + items.length + ' madde' })
+function boardCard(x, multi){
+  var p = x.p, t = x.t, it = x.it;
+  var card = el('div', { class:'bcard' + (it.done ? ' done' : ''), draggable:'true', tabindex:'0', role:'button', 'data-iid': it.id,
+    'aria-label': it.text + ' (' + t.title + ') — listede göster', title:'Listede göstermek için tıklayın • durumunu değiştirmek için başka sütuna sürükleyin',
+    onclick:function(){ goTask(it.id); },
+    onkeydown:function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goTask(it.id); } } }, [
+    el('div', { class:'bhead' }, [
+      el('h4', { text: it.text }),
+      el('span', { class:'bcat', title:'Kategori: ' + t.title, text: t.title })
     ]),
-    items.length ? el('div', { class:'bar', 'aria-hidden':'true' }, [ el('span', { style:'width:' + Math.round(done / items.length * 100) + '%' }) ]) : null
+    multi ? el('div', { class:'bproj' }, [ pdot(p), tx(p.title) ]) : null,
+    el('div', { class:'chips' }, it.done
+      ? [ it.doneAt ? el('span', { class:'chip' }, [ ic('check', 's'), tx(fmtDayShort(dayKey(it.doneAt))) ]) : null, minChip(it) ]
+      : [ prioChip(it), dueChip(it, false), alarmChip(it.id), minChip(it),
+          it.note ? el('span', { class:'chip', title: it.note }, [ ic('note', 's') ]) : null ])
   ]);
-  card.addEventListener('dragstart', function(e){ dragTid = t.id; try { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; } catch(x){} });
-  card.addEventListener('dragend', function(){ dragTid = null; });
+  card.addEventListener('dragstart', function(e){ dragIid = it.id; try { e.dataTransfer.setData('text/plain', it.id); e.dataTransfer.effectAllowed = 'move'; } catch(z){} });
+  card.addEventListener('dragend', function(){ dragIid = null; });
   return card;
 }
 function renderBoard(shown){
-  var cols = [ ['todo','Başlamadı'], ['doing','Devam ediyor'], ['blocked','Bloklu'], ['done','Tamamlandı'] ];
+  var cols = [ ['todo','Yapılacak'], ['doing','Devam ediyor'], ['blocked','Bloklu'], ['done','Tamamlandı'] ];
   var buckets = { todo:[], doing:[], blocked:[], done:[] }, multi = shown.length > 1;
   shown.forEach(function(p){
-    sortBy(p.tasks).forEach(function(t){
+    p.tasks.forEach(function(t){
       if(t.archived && !showArchivedTasks) return;
-      var k = taskIsDone(t) ? 'done' : (buckets[t.status] ? t.status : 'todo');
-      buckets[k].push({ p:p, t:t });
+      t.items.forEach(function(it){
+        if(it.archived && !showArchivedTasks) return;
+        buckets[it.done ? 'done' : (it.status === 'doing' || it.status === 'blocked' ? it.status : 'todo')].push({ p:p, t:t, it:it });
+      });
     });
   });
+  buckets.done.sort(function(a, b){ return (b.it.doneAt || 0) - (a.it.doneAt || 0); });
   var board = el('div', { class:'board', 'aria-label':'Pano görünümü' });
   cols.forEach(function(c){
+    var list = buckets[c[0]];
     var col = el('div', { class:'bcol', 'data-st': c[0] }, [
-      el('div', { class:'bcolh' }, [ el('span', { class:'stpill st-' + c[0], text: c[1] }), el('span', { class:'tcount', text: String(buckets[c[0]].length) }) ])
+      el('div', { class:'bcolh' }, [ el('span', { class:'stpill st-' + c[0], text: c[1] }), el('span', { class:'tcount', text: String(list.length) }) ])
     ]);
-    if(c[0] !== 'done'){
-      col.addEventListener('dragover', function(e){ if(dragTid){ e.preventDefault(); col.classList.add('drop'); } });
-      col.addEventListener('dragleave', function(e){ if(!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
-      col.addEventListener('drop', function(e){
-        e.preventDefault(); col.classList.remove('drop');
-        var x = dragTid && findTaskById(dragTid); dragTid = null;
-        if(x && !taskIsDone(x.t) && x.t.status !== c[0]){ x.t.status = c[0]; commit(); }
-      });
-    }
-    buckets[c[0]].forEach(function(x){ col.appendChild(boardCard(x.p, x.t, multi)); });
-    if(!buckets[c[0]].length) col.appendChild(el('div', { class:'empty', style:'padding:6px 4px', text: c[0] === 'done' ? 'Tamamlanan iş yok.' : 'Buraya iş sürükleyin.' }));
+    col.addEventListener('dragover', function(e){ if(dragIid){ e.preventDefault(); col.classList.add('drop'); } });
+    col.addEventListener('dragleave', function(e){ if(!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
+    col.addEventListener('drop', function(e){
+      e.preventDefault(); col.classList.remove('drop');
+      var loc = dragIid && locateItem(dragIid); dragIid = null;
+      if(!loc) return;
+      var cur = loc.it.done ? 'done' : (loc.it.status || 'todo');
+      if(cur !== c[0]) setItemStatus(loc.it, c[0]);
+    });
+    var shownList = c[0] === 'done' ? list.slice(0, BOARD_DONE_LIMIT) : list;
+    shownList.forEach(function(x){ col.appendChild(boardCard(x, multi)); });
+    if(list.length > shownList.length) col.appendChild(el('div', { class:'empty', style:'padding:6px 4px', text:'… ve ' + (list.length - shownList.length) + ' tamamlanmış madde daha (liste görünümünde)' }));
+    if(!list.length) col.appendChild(el('div', { class:'empty', style:'padding:6px 4px', text: c[0] === 'done' ? 'Tamamlanan madde yok.' : 'Buraya madde sürükleyin.' }));
     board.appendChild(col);
   });
   return board;
@@ -3372,7 +3416,11 @@ function renderTasks(){
     return;
   }
   if(!shown.length){ projEl.appendChild(el('div', { class:'empty', style:'margin-top:16px', text:'Gösterilecek proje yok (arşivde olabilir).' })); return; }
-  if(viewMode === 'board'){ projEl.appendChild(renderBoard(shown)); return; }
+  if(viewMode === 'board'){
+    if(tasksFilter) projEl.appendChild(el('div', { class:'proj single board-head', 'data-sid': shown[0].id }, projectHead(shown[0])));
+    projEl.appendChild(renderBoard(shown));
+    return;
+  }
   shown.forEach(function(p){ projEl.appendChild(projectBlock(p, !!tasksFilter)); });
 }
 /* --- Takvim -------------------------------------------------------------- */
