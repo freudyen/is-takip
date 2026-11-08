@@ -811,6 +811,7 @@ function normTrash(raw){
 function normalize(raw){
   var s = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
   var out = Object.assign({}, s);                 /* tanınmayan alanlar korunur */
+  delete out._sync;                               /* Drive eşitleme damgası veriye ait değil */
   var from = num(s.schemaVersion, 1);
   out.projects = (Array.isArray(s.projects) ? s.projects : []).map(normProject).filter(Boolean);
   out.weekly = normWeekly(s.weekly);
@@ -906,13 +907,13 @@ function changed(){
     clearTimeout(saveTimer);
     saveTimer = setTimeout(writeToJsonFile, 250);
   }
-  if(drive.on) driveQueue();
+  driveQueue();
 }
 function flushSaves(){
   clearTimeout(saveTimer); clearTimeout(snapTimer);
   try { idbSet({ json: JSON.stringify(state), at: Date.now(), dirty: dirty || driveDirty() }, 'snapshot'); } catch(e){}
   if(canWrite && dirty) writeToJsonFile();
-  if(drive.on && driveDirty()){ clearTimeout(drive.timer); driveSave(); }
+  if(driveDirty()){ clearTimeout(drive.timer); driveSync(); }
 }
 function writeToJsonFile(){
   if(!jsonHandle || !canWrite) return Promise.resolve(false);
@@ -1183,20 +1184,37 @@ function downloadCsv(rows, name){
   downloadBlob(blob, name);
 }
 
-/* --- c) Google Drive ----------------------------------------------------- */
+/* --- c) Google Drive -----------------------------------------------------
+   Eşitleme modeli:
+   • Drive'daki is-takip-data.json ortak kopyadır. Her cihaz değişikliklerini
+     önce kendinde (IndexedDB) tutar, tek bir eşitleme döngüsüyle Drive'a yazar.
+   • Yazılan her dosyaya _sync = { id, parent, at, dev } damgası eklenir;
+     cihaz, eşitlediği son sürümleri (ata geçmişi) saklar.
+   • Drive'daki dosya başka bir cihazdan değişmişse "ya o ya bu" diye
+     sorulmaz: ortak ata bulunur, üç yönlü birleştirme yapılır. Kayıtlar
+     kimlikleriyle eşleşir; farklı kayıtlardaki ve aynı kaydın farklı
+     alanlarındaki değişikliklerin hepsi korunur. Aynı alan iki yerde farklı
+     değiştiyse daha yeni olan alınır, Drive'daki önceki hal yedeklenir.
+   • İki cihaz aynı anda yazarsa ezilen değişiklik, ata geçmişi sayesinde
+     o cihazın bir sonraki eşitlemesinde kendiliğinden geri gelir.
+   • Yedekler sunucu tarafında kopyalanır (indirme/yükleme yok) ve kademeli
+     saklanır: son 14 gün hepsi, sonra 8 hafta haftada bir, 12 ay ayda bir.
+     Ayıklananlar kalıcı silinmez, Drive çöp kutusuna taşınır. */
 var GOOGLE_CLIENT_ID = '';
 var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-var DRIVE_FOLDER = 'İş Takip', DRIVE_BACKUPS = 'Yedekler', DRIVE_FILE = 'is-takip-data.json', DRIVE_KEEP = 30;
+var DRIVE_FOLDER = 'İş Takip', DRIVE_BACKUPS = 'Yedekler', DRIVE_FILE = 'is-takip-data.json';
+var DRIVE_POLL_MS = 45000, DRIVE_HIST = 8;
 var drive = {
-  on:false, busy:false, connecting:false, needsLogin:false, again:false, retried:false, loginReason:'',
+  on:false, busy:false, connecting:false, needsLogin:false, retried:false, loginReason:'',
   err:'', info:'', working:'', choice:null, setup:false, picker:null,
   token:null, exp:0, tokenP:null, gisP:null,
-  folderId:null, backupsId:null, fileId:null, md5:null, revId:null,
-  rev:0, savedRev:0, timer:null, backupDay:''
+  folderId:null, backupsId:null, fileId:null,
+  hist:[], histLoaded:false, unsynced:false, pending:false, runP:null,
+  timer:null, poll:null, lastSync:0, backupDay:''
 };
 function driveClientId(){ return (GOOGLE_CLIENT_ID || lsGet('is-takip-gcid') || '').trim(); }
 function driveFlag(){ return lsGet('is-takip-drive') === '1'; }
-function driveDirty(){ return drive.on && drive.rev !== drive.savedRev; }
+function driveDirty(){ return drive.on && drive.unsynced; }
 function authErr(m){ var e = new Error(m); e.auth = true; return e; }
 
 /* Google giriş betiği yalnızca Drive gerçekten kullanılınca yüklenir. */
@@ -1317,7 +1335,7 @@ function driveEnsure(){
     drive.backupsId = bid;
     return dList("name='" + dEsc(DRIVE_FILE) + "' and '" + drive.folderId + "' in parents and trashed=false");
   }).then(function(fs){
-    if(fs.length){ drive.fileId = fs[0].id; drive.md5 = fs[0].md5Checksum; }
+    if(fs.length) drive.fileId = fs[0].id;
   });
 }
 function driveRead(id){ return driveFetch(D_API + '/' + (id || drive.fileId) + '?alt=media').then(function(r){ return r.text(); }); }
@@ -1332,91 +1350,265 @@ function driveWrite(text){
     .then(function(r){ return r.json(); })
     .catch(function(e){ if(e.status === 404){ drive.fileId = null; return create(); } throw e; });
 }
-function drivePrune(prefix){
-  return dList("'" + drive.backupsId + "' in parents and trashed=false", '&orderBy=' + encodeURIComponent('createdTime desc')).then(function(fs){
-    fs = fs.filter(function(f){ return f.name.indexOf(prefix) === 0; });
-    return fs.slice(DRIVE_KEEP).reduce(function(p, f){
-      return p.then(function(){ return driveFetch(D_API + '/' + f.id, { method:'DELETE' }).catch(function(){}); });
-    }, Promise.resolve());
+function devId(){ var d = lsGet('is-takip-dev'); if(!d){ d = uid(); lsSet('is-takip-dev', d); } return d; }
+
+/* --- üç yönlü birleştirme ------------------------------------------------ */
+/* Anahtar sırasından bağımsız, karşılaştırılabilir metin (undefined alanlar yok sayılır) */
+function canon(v){
+  if(v === undefined) return '~';
+  if(v === null || typeof v !== 'object') return JSON.stringify(v);
+  if(Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  return '{' + Object.keys(v).filter(function(k){ return v[k] !== undefined; }).sort()
+    .map(function(k){ return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+}
+function same(a, b){ return a === b || canon(a) === canon(b); }
+function isPlain(v){ return !!v && typeof v === 'object' && !Array.isArray(v); }
+function hasIds(arr){ return arr.every(function(x){ return isPlain(x) && typeof x.id === 'string' && x.id; }); }
+/* b: ortak ata (yoksa undefined), l: bu cihaz, r: Drive. Girdiler değiştirilmez.
+   ctx.prefer: aynı alan iki tarafta farklı değiştiyse kazanan ('local' | 'remote'). */
+function merge3(b, l, r, ctx){
+  if(same(l, r)) return l;
+  if(same(b, l)) return r;
+  if(same(b, r)) return l;
+  /* iki taraf da değiştirmiş */
+  if(l === undefined) return r;            /* biri silip diğeri değiştirdiyse veri korunur */
+  if(r === undefined) return l;
+  if(isPlain(l) && isPlain(r)){
+    var bo = isPlain(b) ? b : {}, out = {};
+    Object.keys(l).concat(Object.keys(r).filter(function(k){ return !(k in l); })).forEach(function(k){
+      var v = merge3(bo[k], l[k], r[k], ctx);
+      if(v !== undefined) out[k] = v;
+    });
+    return out;
+  }
+  if(Array.isArray(l) && Array.isArray(r)){
+    var ba = Array.isArray(b) ? b : [];
+    if(hasIds(l) && hasIds(r) && hasIds(ba)) return mergeById(ba, l, r, ctx);
+  }
+  ctx.conflicts++;
+  return ctx.prefer === 'remote' ? r : l;
+}
+function mergeById(b, l, r, ctx){
+  function map(a){ var m = {}; a.forEach(function(x){ m[x.id] = x; }); return m; }
+  var bm = map(b), lm = map(l), rm = map(r);
+  /* sıra: bu cihazdaki sıra; Drive'da yeni eklenenler oradaki önceki komşusunun arkasına */
+  var order = l.map(function(x){ return x.id; });
+  r.forEach(function(x, i){
+    if(lm[x.id]) return;
+    var at = -1;
+    for(var j = i - 1; j >= 0 && at < 0; j--) at = order.indexOf(r[j].id);
+    order.splice(at + 1, 0, x.id);
+  });
+  var out = [];
+  order.forEach(function(id){
+    var v = merge3(bm[id], lm[id], rm[id], ctx);
+    if(v !== undefined) out.push(v);
+  });
+  return out;
+}
+
+/* --- ata geçmişi: bu cihazın Drive ile eşitlediği son sürümler ---------- */
+function histLoad(){
+  return idbGet('drivehist').then(function(h){
+    drive.hist = (h && Array.isArray(h.list) && h.fileId && h.fileId === drive.fileId) ? h.list : [];
+    drive.histLoaded = true;
   });
 }
+function histSave(){ return idbSet({ fileId: drive.fileId, list: drive.hist }, 'drivehist'); }
+function histAdd(id, revId, json){
+  drive.hist = [ { id:id, revId:revId || null, json:json } ]
+    .concat(drive.hist.filter(function(h){ return h.id !== id; })).slice(0, DRIVE_HIST);
+  return histSave();
+}
+function histFind(id){ return id ? (drive.hist.find(function(h){ return h.id === id; }) || null) : null; }
+function histTop(){ return drive.hist[0] || null; }
+
+/* --- eşitleme ------------------------------------------------------------ */
+function applyState(s){ state = s; render(); updateBar(); saveSnapshot(); }
+function afterSynced(json){
+  drive.lastSync = Date.now(); drive.err = ''; drive.needsLogin = false; drive.loginReason = '';
+  drive.unsynced = canon(state) !== json;    /* yazarken yeni değişiklik olduysa döngü tekrar yazar */
+  if(drive.unsynced) drive.pending = true;
+  else if(!canWrite) dirty = false;
+  saveSnapshot();
+}
+/* Bu cihazdaki durumu Drive'a yaz; parentId: bu sürümün dayandığı Drive sürümü */
+function drivePush(parentId){
+  var id = uid(), json = canon(state);
+  var obj = Object.assign({}, state, { _sync: { id:id, parent: parentId || null, at: Date.now(), dev: devId() } });
+  var text = JSON.stringify(obj, null, 2);
+  return driveDailyBackup().then(function(){ return driveWrite(text); }).then(function(m){
+    return (m && m.headRevisionId) ? m : driveMeta();
+  }).then(function(m){
+    return histAdd(id, m.headRevisionId, json);
+  }).then(function(){ afterSynced(json); });
+}
+/* Drive'daki dosya bizim son bildiğimizden farklı: bu cihazdakiyle birleştir */
+function driveIntegrate(txt, meta){
+  var parsed;
+  try { parsed = JSON.parse(txt); } catch(e){ parsed = null; }
+  if(!isPlain(parsed)) throw new Error('Drive\'daki dosya okunamadı (geçersiz JSON). Üzerine yazılmadı; "Drive yedeğinden geri yükle" ile düzeltebilirsiniz.');
+  var sy = isPlain(parsed._sync) ? parsed._sync : {};
+  var remote = normalize(parsed), rjson = canon(remote);
+  var rid = str(sy.id) || ('rev:' + (meta.headRevisionId || Date.now()));
+  var ljson = canon(state);
+  if(ljson === rjson) return histAdd(rid, meta.headRevisionId, rjson).then(function(){ afterSynced(rjson); });
+
+  /* ortak ata: Drive sürümünün kendisi ya da dayandığı sürüm bizde kayıtlıysa o
+     (eski sürüm bir uygulama dosyayı değiştirdiyse damga eskide kalır, yine doğru ata olur),
+     yoksa bizim son eşitlediğimiz sürüm; hiç yoksa (ilk bağlantı) atasız birleştirme. */
+  var anc = histFind(sy.id) || histFind(sy.parent) || histTop();
+  var ctx = { conflicts:0, prefer: num(lsGet('is-takip-localat'), 0) >= num(sy.at, 0) ? 'local' : 'remote' };
+  var merged = normalize(merge3(anc ? JSON.parse(anc.json) : undefined, state, remote, ctx));
+  var mjson = canon(merged);
+
+  return histAdd(rid, meta.headRevisionId, rjson).then(function(){
+    if(mjson === ljson){                 /* Drive'dakilerin hepsi zaten burada */
+      if(mjson === rjson) return afterSynced(rjson);
+      if(!ctx.conflicts) return drivePush(rid);
+      /* aynı alanda bu cihazdaki daha yeni olduğu için kazandı: diğer cihazın hali yedekte kalsın */
+      return driveCopyHead('is-takip-birlesme-' + bkStamp()).catch(function(){}).then(function(){ return drivePush(rid); }).then(function(){
+        toast(ctx.conflicts + ' yerde aynı bilgi diğer cihazda da değiştirilmişti; bu cihazdaki daha yeni olduğu için o alındı (Drive\'daki önceki hal Yedekler klasöründe).', { ms:12000 });
+      });
+    }
+    if(editKey){                       /* kullanıcı bir satırı düzenlerken ekranı değiştirme */
+      clearTimeout(drive.timer); drive.timer = setTimeout(driveSync, 5000);
+      return;
+    }
+    applyState(merged);
+    /* aynı alan iki cihazda farklı değiştiyse kullanıcıya söyle; bu cihazdaki hal tek tıkla geri gelir */
+    function conflictToast(backedUp){
+      toast('Diğer cihazdaki değişikliklerle birleştirildi. ' + ctx.conflicts + ' yerde aynı bilgi iki cihazda farklı değiştirilmişti; daha yeni olan alındı' +
+        (backedUp ? ' (Drive\'daki önceki hal Yedekler klasöründe).' : '.'),
+        { ms:15000, actionLabel:'↩ Bu cihazdakini kullan', action:function(){
+          state = normalize(JSON.parse(ljson)); changed(); render();
+          toast('Bu cihazdaki hali geri yüklendi; Drive\'a yazılıyor.');
+        } });
+    }
+    if(mjson === rjson){                 /* sonuç Drive'dakiyle aynı: yazmaya gerek yok */
+      afterSynced(rjson);
+      if(ctx.conflicts) conflictToast(false); else announce('Diğer cihazdaki değişiklikler alındı.');
+      return;
+    }
+    drive.unsynced = true;
+    /* iki tarafın değişiklikleri birleşti: sonucu Drive'a yaz */
+    var pre = ctx.conflicts ? driveCopyHead('is-takip-birlesme-' + bkStamp()).catch(function(){}) : Promise.resolve();
+    return pre.then(function(){ return drivePush(rid); }).then(function(){
+      if(ctx.conflicts) conflictToast(true);
+      else toast('Diğer cihazdaki değişiklikler bu cihazdakilerle birleştirildi.');
+    });
+  });
+}
+function driveSyncOnce(){
+  return driveToken(false).then(driveEnsure).then(function(){
+    if(!drive.histLoaded) return histLoad();
+  }).then(function(){
+    if(!drive.fileId) return drivePush(histTop() ? histTop().id : null);   /* Drive'da dosya yok: bu cihazdaki ilk sürüm olur */
+    return driveMeta().then(function(m){
+      if(m.trashed){ drive.fileId = null; return drivePush(histTop() ? histTop().id : null); }
+      var top = histTop();
+      if(top && m.headRevisionId && m.headRevisionId === top.revId){       /* Drive değişmemiş */
+        if(canon(state) === top.json){ afterSynced(top.json); return; }
+        return drivePush(top.id);
+      }
+      return driveRead().then(function(txt){ return driveIntegrate(txt, m); });
+    });
+  });
+}
+/* Tek eşitleme döngüsü: aynı anda yalnızca bir eşitleme çalışır; bu sırada
+   gelen istekler döngünün bir tur daha dönmesini sağlar. */
+function driveSync(){
+  if(!drive.on) return Promise.resolve();
+  drive.pending = true;
+  if(drive.runP) return drive.runP;
+  drive.busy = true; updateBar();
+  drive.runP = (function loop(){
+    drive.pending = false;
+    return driveSyncOnce().then(function(){ if(drive.pending && drive.on) return loop(); });
+  })().catch(driveFail).then(function(){
+    drive.runP = null; drive.busy = false; updateBar();
+  });
+  return drive.runP;
+}
+function driveSyncNow(){ drive.info = ''; return driveSync(); }
+function driveFail(e){
+  if(e && (e.auth || e.status === 401 || e.status === 403)){ drive.needsLogin = true; drive.loginReason = errMsg(e); return; }
+  drive.err = 'Drive ile eşitlenemedi: ' + errMsg(e) + ' — değişiklikler bu cihazda güvende, bağlantı düzelince kendiliğinden eşitlenir.';
+}
+/* Her değişiklikte çağrılır: kısa bir beklemeden sonra eşitle */
+function driveQueue(){
+  lsSet('is-takip-localat', String(Date.now()));
+  if(!drive.on) return;
+  drive.info = ''; drive.unsynced = true;
+  clearTimeout(drive.timer);
+  drive.timer = setTimeout(driveSync, 1500);
+}
+/* Sayfa açıkken diğer cihazların değişikliklerini düzenli kontrol et (yalnızca küçük bir üstveri isteği) */
+function drivePollStart(){
+  clearInterval(drive.poll);
+  drive.poll = setInterval(function(){
+    if(drive.on && !drive.needsLogin && document.visibilityState === 'visible') driveSync();
+  }, DRIVE_POLL_MS);
+}
+
+/* --- yedekler ------------------------------------------------------------ */
+function bkStamp(){ var d = new Date(); return todayKey() + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()); }
+function bkLabel(name){
+  var m = /^is-takip-(yedek|elle|birlesme|cakisma|onceki)-(\d{4}-\d{2}-\d{2})(?:-(\d{2})(\d{2}))?/.exec(name);
+  if(!m || !isDayKey(m[2])) return name;
+  var kind = { yedek:'Günlük yedek', elle:'Elle alınan yedek', birlesme:'Birleştirme öncesi', cakisma:'Çakışma öncesi', onceki:'Bağlanma öncesi' }[m[1]];
+  return kind + ' — ' + fmtDay(m[2]) + (m[3] ? ' ' + m[3] + ':' + m[4] : '');
+}
+/* Drive'daki güncel dosyanın sunucu tarafında kopyası */
+function driveCopyHead(name){
+  if(!drive.fileId) return Promise.resolve(null);
+  return driveFetch(D_API + '/' + drive.fileId + '/copy?fields=id', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ name: name + '.json', parents: [drive.backupsId] }) }).then(function(r){ return r.json(); });
+}
+/* Günün ilk yazmasından önce, üzerine yazılacak hali yedekle (cihazlar arası tek yedek/gün) */
 function driveDailyBackup(){
   var day = todayKey();
-  if(drive.backupDay === day || !drive.fileId) return Promise.resolve();
-  var name = 'is-takip-yedek-' + day + '.json';
-  return dList("name='" + dEsc(name) + "' and '" + drive.backupsId + "' in parents and trashed=false").then(function(fs){
-    if(fs.length){ drive.backupDay = day; return; }
-    return driveRead().then(function(txt){
-      if(!txt || !txt.trim()){ drive.backupDay = day; return; }
-      return dCreate(name, drive.backupsId, txt).then(function(){ drive.backupDay = day; return drivePrune('is-takip-yedek-'); });
+  if(!drive.fileId || drive.backupDay === day) return Promise.resolve();
+  var name = 'is-takip-yedek-' + day;
+  return dList("name='" + dEsc(name + '.json') + "' and '" + drive.backupsId + "' in parents and trashed=false").then(function(fs){
+    return fs.length ? null : driveCopyHead(name);
+  }).then(function(){ drive.backupDay = day; return drivePrune(); })
+    .catch(function(e){ if(e && (e.auth || e.status === 401)) throw e; /* yedek alınamaması eşitlemeyi durdurmaz */ });
+}
+/* Kademeli saklama: son 14 gün hepsi; daha eskilerde elle alınanların en yeni 20'si,
+   8 hafta boyunca haftada bir, 12 ay boyunca ayda bir. Tanınmayan dosyalara dokunulmaz. */
+function drivePrune(){
+  return dList("'" + drive.backupsId + "' in parents and trashed=false", '&orderBy=' + encodeURIComponent('createdTime desc')).then(function(fs){
+    var tk = todayKey(), weeks = {}, months = {}, manual = 0, del = [];
+    fs.forEach(function(f){
+      var m = /^is-takip-(yedek|elle|birlesme|cakisma|onceki)-(\d{4}-\d{2}-\d{2}).*\.json$/i.exec(f.name);
+      if(!m || !isDayKey(m[2])) return;
+      var age = dayDiff(tk, m[2]);
+      if(age <= 14) return;
+      if(m[1] === 'elle' && manual++ < 20) return;
+      var wk = mondayKey(keyToDate(m[2]).getTime()), mo = m[2].slice(0, 7);
+      if(age <= 14 + 56){ if(!weeks[wk]){ weeks[wk] = true; return; } del.push(f); return; }
+      if(age <= 366 && !months[mo]){ months[mo] = true; return; }
+      del.push(f);
     });
-  }).catch(function(e){ if(e.status === 404){ drive.fileId = null; return; } throw e; });
-}
-function driveSnapshotRemote(prefix){
-  if(!drive.fileId) return Promise.resolve();
-  prefix = prefix || 'is-takip-onceki-';
-  return driveRead().then(function(txt){
-    if(!txt || !txt.trim()) return;
-    return dCreate(prefix + todayKey() + '-' + Date.now().toString(36) + '.json', drive.backupsId, txt)
-      .then(function(){ return drivePrune(prefix); });
+    return del.slice(0, 40).reduce(function(p, f){
+      return p.then(function(){
+        return driveFetch(D_API + '/' + f.id + '?fields=id', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ trashed:true }) }).catch(function(){});
+      });
+    }, Promise.resolve());
   });
-}
-function driveFail(e){
-  if(e && (e.auth || e.status === 401 || e.status === 403)) drive.needsLogin = true;
-  drive.err = 'Drive\'a kaydedilemedi: ' + errMsg(e);
-}
-/* Yazmadan önce uzaktaki sürüm değişmiş mi diye bak: başka bir cihazın
-   kaydını sessizce ezmeyi önler. */
-function driveGuard(){
-  if(!drive.fileId || !drive.revId) return Promise.resolve(true);
-  return driveMeta().then(function(m){
-    if(!m.headRevisionId || m.headRevisionId === drive.revId) return true;
-    return driveSnapshotRemote('is-takip-cakisma-').then(function(){
-      drive.choice = { type:'conflict' };
-      return false;
-    });
-  });
-}
-function driveSave(){
-  if(!drive.on || drive.choice) return Promise.resolve();
-  if(drive.busy){ drive.again = true; return Promise.resolve(); }
-  drive.busy = true; drive.err = '';
-  var rev = drive.rev, text = stateText();
-  updateBar();
-  return driveToken(false).then(driveEnsure).then(driveGuard).then(function(ok){
-    if(!ok) return;
-    return driveDailyBackup().then(function(){ return driveWrite(text); }).then(function(m){
-      if(m.md5Checksum && m.headRevisionId) return m;
-      return driveMeta();
-    }).then(function(m){
-      drive.md5 = m.md5Checksum || null;
-      drive.revId = m.headRevisionId || null;
-      drive.savedRev = rev; drive.needsLogin = false;
-      /* Drive'a yazıldıysa veri güvende: aradan yeni bir değişiklik
-         geçmediyse "kaydedilmemiş" işaretini kaldır. */
-      if(drive.rev === rev && !canWrite) dirty = false;
-      saveSnapshot();
-    });
-  }).catch(driveFail).then(function(){
-    drive.busy = false; updateBar();
-    if(drive.again){ drive.again = false; setTimeout(driveSave, 300); }
-  });
-}
-function driveQueue(){
-  drive.info = '';
-  drive.rev++;
-  clearTimeout(drive.timer);
-  drive.timer = setTimeout(driveSave, 1500);
 }
 function driveBackupNow(){
   if(!drive.on || drive.working) return Promise.resolve();
   drive.working = 'Drive\'a yedek alınıyor…'; drive.err = ''; drive.info = ''; updateBar();
-  var d = new Date(), name = 'is-takip-elle-' + todayKey() + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.json';
-  var text = stateText();
-  return driveToken(true).then(driveEnsure).then(function(){
-    return dCreate(name, drive.backupsId, text);
-  }).then(function(){ return drivePrune('is-takip-elle-'); }).then(function(){
-    drive.info = '✓ Yedek alındı: ' + DRIVE_FOLDER + ' › ' + DRIVE_BACKUPS + ' › ' + name;
+  var name = 'is-takip-elle-' + bkStamp();
+  return driveToken(true).then(function(){ return driveSync(); }).then(function(){
+    if(drive.needsLogin) throw authErr(drive.loginReason || 'Giriş gerekli');
+    if(drive.err) throw new Error('önce eşitleme tamamlanamadı');
+    return driveCopyHead(name);
+  }).then(function(){
+    drive.info = '✓ Yedek alındı: ' + DRIVE_FOLDER + ' › ' + DRIVE_BACKUPS + ' › ' + name + '.json';
+    return drivePrune().catch(function(){});
   }).catch(function(e){ drive.err = 'Yedek alınamadı: ' + errMsg(e); if(e && e.auth) drive.needsLogin = true; })
     .then(function(){ drive.working = ''; updateBar(); });
 }
@@ -1427,127 +1619,106 @@ function driveOpenPicker(){
     return dList("'" + drive.backupsId + "' in parents and trashed=false", '&orderBy=' + encodeURIComponent('createdTime desc'));
   }).then(function(fs){
     fs = fs.filter(function(f){ return /\.json$/i.test(f.name); });
-    drive.picker = { files: fs.slice(0, 60), sel: fs.length ? fs[0].id : '' };
+    drive.picker = { files: fs.slice(0, 80), sel: fs.length ? fs[0].id : '' };
     if(!fs.length) drive.info = 'Yedekler klasöründe json dosyası bulunamadı.';
   }).catch(function(e){ drive.err = 'Yedekler listelenemedi: ' + errMsg(e); if(e && e.auth) drive.needsLogin = true; })
     .then(function(){ drive.working = ''; updateBar(); });
 }
 function driveRestoreBackup(id, name){
-  drive.working = '"' + name + '" yükleniyor…'; drive.err = ''; updateBar();
+  drive.working = '"' + bkLabel(name) + '" yükleniyor…'; drive.err = ''; updateBar();
   return driveRead(id).then(function(txt){
     var data;
-    try { data = normalize(JSON.parse(txt)); } catch(e){ throw new Error('Yedek geçerli bir JSON değil.'); }
+    try { var p = JSON.parse(txt); delete p._sync; data = normalize(p); } catch(e){ throw new Error('Yedek geçerli bir JSON değil.'); }
     drive.picker = null;
-    applyImported(data, '"' + name + '"');
+    applyImported(data, '"' + bkLabel(name) + '"');      /* yerel değişiklik olarak Drive'a da yazılır */
   }).catch(function(e){ drive.err = 'Yedek yüklenemedi: ' + errMsg(e); })
     .then(function(){ drive.working = ''; updateBar(); });
 }
-function driveAdopt(remoteState, meta){
-  drive.md5 = meta && meta.md5Checksum || null;
-  drive.revId = meta && meta.headRevisionId || null;
-  drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
-  drive.rev = 0; drive.savedRev = 0; dirty = false;
+
+/* --- bağlanma / bağlantıyı kesme ---------------------------------------- */
+function driveStart(){
+  drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = ''; drive.connecting = false;
   lsSet('is-takip-drive', '1');
-  adoptData(remoteState, 'Drive verileri');
-  saveSnapshot();
+  drivePollStart();
+  return driveSync();
 }
-function driveLoadRemote(){
-  return driveMeta().then(function(meta){
-    return driveRead().then(function(txt){
-      var r;
-      try { r = normalize(JSON.parse(txt)); } catch(e){ throw new Error('Drive\'daki dosya geçerli bir JSON değil.'); }
-      driveAdopt(r, meta);
-    });
-  });
-}
-function driveKeepLocal(){
-  return driveSnapshotRemote().then(function(){ return drive.fileId ? driveMeta() : { md5Checksum:null, headRevisionId:null }; }).then(function(m){
-    drive.md5 = m.md5Checksum; drive.revId = m.headRevisionId;
-    drive.on = true; drive.choice = null; drive.needsLogin = false; drive.err = '';
-    lsSet('is-takip-drive', '1');
-    drive.rev++;
-    return driveSave();
-  });
-}
+/* İlk bağlantı: iki tarafta da farklı veri varsa yalnızca bu sefer sorulur */
 function driveConnect(){
   drive.err = ''; drive.connecting = true; updateBar();
-  return driveToken(true).then(driveEnsure).then(function(){
-    if(!drive.fileId) return driveKeepLocal();
+  return driveToken(true).then(driveEnsure).then(histLoad).then(function(){
+    if(!drive.fileId || drive.hist.length) return driveStart();
     return driveRead().then(function(txt){
-      var remote = null; try { remote = normalize(JSON.parse(txt)); } catch(e){}
-      var localEmpty = isEmptyState(state);
-      if(remote && (localEmpty || JSON.stringify(remote) === JSON.stringify(normalize(clone(state))))) return driveLoadRemote();
+      var remote = null;
+      try { var p = JSON.parse(txt); delete p._sync; remote = normalize(p); } catch(e){}
+      if(remote && (isEmptyState(state) || isEmptyState(remote) || canon(remote) === canon(state))) return driveStart();
       drive.choice = { type:'connect', remoteOk: !!remote };
     });
   }).catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
 }
 function driveChoose(what){
   var c = drive.choice; if(!c) return;
-  drive.err = ''; drive.connecting = true; updateBar();
+  drive.err = ''; drive.connecting = true; drive.choice = null; updateBar();
   var p;
-  if(what === 'cancel'){ drive.choice = null; if(c.type === 'connect') drive.on = false; p = Promise.resolve(); }
-  else if(what === 'remote'){ drive.choice = null; p = driveLoadRemote(); }
-  else { drive.choice = null; p = driveKeepLocal(); }
+  if(what === 'cancel'){ drive.connecting = false; p = Promise.resolve(); }
+  else if(what === 'merge') p = driveStart();                         /* atasız birleştirme: iki taraftaki her kayıt korunur */
+  else if(what === 'remote'){
+    var mine = canon(state);
+    p = driveRead().then(function(txt){
+      var x = JSON.parse(txt); delete x._sync;
+      applyState(normalize(x));
+      toast('Drive\'daki veriler yüklendi.', { ms:12000, actionLabel:'↩ Bu cihazdakini geri getir', action:function(){
+        state = normalize(JSON.parse(mine)); changed(); render();
+      } });
+      return driveStart();
+    });
+  } else {                                                           /* bu cihazdaki Drive'dakinin yerine geçer */
+    p = driveCopyHead('is-takip-onceki-' + bkStamp()).then(driveMeta).then(function(m){
+      return driveRead().then(function(txt){
+        var x = null; try { x = JSON.parse(txt); } catch(e){}
+        if(!isPlain(x)) return;                      /* bozuk dosya: ata kaydı olmadan üzerine yazılır */
+        var sy = isPlain(x._sync) ? x._sync : {};
+        return histAdd(str(sy.id) || ('rev:' + m.headRevisionId), null, canon(normalize(x)));
+      });
+    }).then(function(){
+      drive.on = true; lsSet('is-takip-drive', '1'); drivePollStart();
+      return drivePush(histTop() ? histTop().id : null);
+    }).then(function(){ toast('Bu cihazdaki veriler Drive\'a yazıldı (Drive\'daki önceki hal Yedekler klasöründe).'); });
+  }
   return p.catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
 }
 function driveReconnect(){
-  if(!drive.on) return driveConnect();
+  if(!driveFlag() && !drive.on) return driveConnect();
   drive.connecting = true; drive.err = ''; updateBar();
-  return driveToken(true).then(function(){
-    drive.needsLogin = false; drive.loginReason = '';
-    /* Drive'da dosya varsa ve burada kaydedilmemiş bir şey yoksa önce onu oku. */
-    return driveEnsure().then(function(){
-      if(drive.fileId && !driveDirty() && !dirty) return driveLoadRemote();
-      drive.on = true;
-      return driveSave();
-    });
-  }).catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
+  return driveToken(true).then(driveEnsure).then(driveStart)
+    .catch(driveFail).then(function(){ drive.connecting = false; updateBar(); });
 }
 function driveDisconnect(){
-  clearTimeout(drive.timer);
+  clearTimeout(drive.timer); clearInterval(drive.poll);
   if(drive.token){
     try { if(window.google && google.accounts && google.accounts.oauth2 && google.accounts.oauth2.revoke) google.accounts.oauth2.revoke(drive.token); } catch(e){}
   }
-  drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = ''; drive.picker = null;
-  drive.folderId = drive.backupsId = drive.fileId = drive.md5 = drive.revId = null;
+  drive.on = false; drive.choice = null; drive.needsLogin = false; drive.err = ''; drive.picker = null; drive.unsynced = false;
+  drive.folderId = drive.backupsId = drive.fileId = null;
+  drive.hist = []; drive.histLoaded = false;
+  idbSet({ fileId:null, list:[] }, 'drivehist');
   dropToken();
   lsSet('is-takip-drive', null);
   updateBar();
 }
-function driveSyncNow(){
-  if(driveDirty()) return driveSave();
-  return driveSync(true);
-}
-function driveSync(manual){
-  if(!drive.on || drive.busy || drive.connecting || drive.choice || !drive.fileId) return Promise.resolve();
-  if(!manual && (driveDirty() || editKey)) return Promise.resolve();
-  return driveToken(false).then(function(){ return driveMeta(); }).then(function(m){
-    var changedRemote = (m.headRevisionId && drive.revId) ? (m.headRevisionId !== drive.revId)
-      : (m.md5Checksum && drive.md5 ? String(m.md5Checksum) !== String(drive.md5) : false);
-    if(!changedRemote) return;
-    if(driveDirty()){ drive.choice = { type:'conflict' }; return; }
-    return driveLoadRemote();
-  }).catch(function(e){
-    if(e && e.auth) drive.needsLogin = true;
-    else if(manual) drive.err = 'Eşitlenemedi: ' + errMsg(e);
-  }).then(updateBar);
-}
+/* Açılışta: daha önce bağlanılmışsa sessizce bağlan ve eşitle. Bu cihazda
+   eşitlenmemiş değişiklik varsa sorulmaz, Drive'dakiyle birleştirilir. */
 function driveInit(){
   if(!driveFlag() || !driveClientId()) return;
   drive.connecting = true; updateBar();
-  driveToken(false).then(driveEnsure).then(function(){
-    if(dirty && !isEmptyState(state)){ drive.choice = { type:'connect', remoteOk: !!drive.fileId }; return; }
-    if(!drive.fileId){ drive.on = true; return; }
-    return driveLoadRemote();
-  }).catch(function(e){
-    drive.on = false; drive.needsLogin = true;
-    drive.loginReason = errMsg(e);
-    if(!e.auth) drive.err = 'Drive bağlantısı kurulamadı: ' + errMsg(e);
-    /* Sessiz giriş ilk denemede sık sık boşa çıkar (Google betiği ya da
-       oturum henüz hazır değildir): bir kez daha dene. */
-    if(!drive.retried){
-      drive.retried = true;
-      setTimeout(function(){ if(drive.needsLogin && !drive.on) driveInit(); }, 2000);
+  driveToken(false).then(driveEnsure).then(driveStart).catch(function(e){
+    drive.on = false;
+    if(e && e.auth){
+      drive.needsLogin = true; drive.loginReason = errMsg(e);
+      /* sessiz giriş ilk denemede sık sık boşa çıkar (Google betiği / oturum hazır değil): bir kez daha dene */
+      if(!drive.retried){ drive.retried = true; setTimeout(function(){ if(drive.needsLogin && !drive.on) driveInit(); }, 2000); }
+    } else {
+      drive.err = 'Drive bağlantısı kurulamadı: ' + errMsg(e) + ' — değişiklikler bu cihazda saklanıyor, 30 saniye sonra yeniden denenecek.';
+      setTimeout(function(){ if(!drive.on && driveFlag()) driveInit(); }, 30000);
     }
   }).then(function(){ drive.connecting = false; updateBar(); });
 }
@@ -2017,20 +2188,22 @@ function driveBarParts(){
   var cls = 'status', msg, btns = [];
   function B(t, fn, primary, dis){ var b = el('button', { class:(primary ? 'primary ' : '') + 'small', text:t, onclick:fn }); if(dis) b.disabled = true; btns.push(b); }
   if(drive.err){ cls += ' err'; msg = '⚠ ' + drive.err; }
-  else if(drive.choice && drive.choice.type === 'connect'){ cls += ' warn'; msg = 'Drive\'da zaten kayıtlı veri var. Hangisi kullanılsın?'; }
-  else if(drive.choice && drive.choice.type === 'conflict'){ cls += ' warn'; msg = '⚠ Drive\'daki dosya başka bir cihazdan değişmiş. Üzerine yazmadan önce seçin (eski hali Yedekler\'e kopyalandı).'; }
+  else if(drive.choice){ cls += ' warn'; msg = drive.choice.remoteOk
+    ? 'Hem bu cihazda hem Drive\'da farklı veriler var. Birleştirmek önerilir: iki taraftaki bütün projeler, işler ve kayıtlar korunur.'
+    : '⚠ Drive\'daki dosya okunamıyor (bozuk). Bu cihazdakini yazabilir ya da önce Drive yedeğinden geri yükleyebilirsiniz.'; }
   else if(drive.working){ cls += ' warn'; msg = '☁ ' + drive.working; }
   else if(drive.connecting){ cls += ' warn'; msg = '☁ Google Drive\'a bağlanılıyor…'; }
   else if(drive.needsLogin){
     cls += ' warn';
-    msg = '☁ Drive bağlantısı için yeniden giriş gerekli — düğmeye bir kez basmanız yeterli; verileriniz bu arada bu cihazda saklanıyor.' +
+    msg = '☁ Drive bağlantısı için yeniden giriş gerekli — düğmeye bir kez basmanız yeterli. Bu arada yaptıklarınız bu cihazda saklanıyor ve bağlanınca Drive\'dakiyle otomatik birleştiriliyor.' +
       (isStandalone() ? ' (Yüklü uygulama penceresinde Google tıklamasız girişe izin vermiyor; tarayıcı sekmesinde bu sorun çıkmaz. Bir kez bağlandığınızda yetki yaklaşık bir saat hatırlanır.)' : '') +
       (drive.loginReason ? ' (Sebep: ' + drive.loginReason + ')' : '');
   }
-  else if(drive.on && drive.busy){ cls += ' warn'; msg = '● Drive\'a yazılıyor…'; }
+  else if(drive.on && drive.busy && driveDirty()){ cls += ' warn'; msg = '● Drive ile eşitleniyor…'; }
   else if(drive.on && driveDirty()){ cls += ' warn'; msg = '● Değişiklikler birazdan Drive\'a yazılacak…'; }
   else if(drive.on && drive.info){ cls += ' ok'; msg = drive.info; }
-  else if(drive.on){ cls += ' ok'; msg = '✓ Veriler Google Drive › ' + DRIVE_FOLDER + ' klasörüne otomatik kaydediliyor. Günlük yedekler Yedekler klasöründe.'; }
+  else if(drive.on){ cls += ' ok'; msg = '✓ Drive ile eşit' + (drive.lastSync ? ' (son kontrol ' + fmtTime(drive.lastSync) + ')' : '') +
+    '. Diğer cihazlardaki değişiklikler otomatik birleştirilir; günlük yedekler ' + DRIVE_FOLDER + ' › ' + DRIVE_BACKUPS + ' klasöründe.'; }
   else if(driveFlag() && !driveClientId()){
     cls += ' warn';
     msg = '⚠ Drive bağlantısı açık görünüyor ama bu adreste Google istemci kimliği kayıtlı değil. Tarayıcı ayarları her adres için ayrı saklanır: sayfayı daha önce kullandığınız adresten açtığınızdan emin olun (şu an: ' +
@@ -2042,8 +2215,12 @@ function driveBarParts(){
   else { msg = 'Veriler henüz Google Drive\'a bağlı değil.'; }
 
   if(drive.choice){
-    B('☁ Drive\'dakini yükle', function(){ driveChoose('remote'); }, true, drive.choice.type === 'connect' && !drive.choice.remoteOk);
-    B('⬆ Bu cihazdakini Drive\'a yaz', function(){ driveChoose('local'); }, true);
+    if(drive.choice.remoteOk){
+      B('🔀 Birleştir (önerilen)', function(){ driveChoose('merge'); }, true);
+      B('☁ Drive\'dakini kullan', function(){ driveChoose('remote'); });
+    }
+    B('⬆ Bu cihazdakini kullan', function(){ driveChoose('local'); }, !drive.choice.remoteOk);
+    if(!drive.choice.remoteOk) B('♻ Drive yedeğinden geri yükle', function(){ drive.choice = null; drive.on = true; driveOpenPicker(); });
     B('Vazgeç', function(){ driveChoose('cancel'); });
   } else if(drive.needsLogin){
     B('🔓 Drive\'a yeniden bağlan', driveReconnect, true);
@@ -2076,7 +2253,8 @@ function drivePickerBox(){
   var p = drive.picker;
   var sel = el('select', { 'aria-label':'Yedek dosyası', style:'flex:1 1 260px' }, p.files.map(function(f){
     var when = f.createdTime ? new Date(f.createdTime).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
-    return el('option', { value:f.id, text: f.name + (when ? '  —  ' + when : '') });
+    var lbl = bkLabel(f.name);
+    return el('option', { value:f.id, text: lbl === f.name ? f.name + (when ? '  —  ' + when : '') : lbl });
   }));
   sel.value = p.sel;
   sel.addEventListener('change', function(){ p.sel = sel.value; });
@@ -2084,7 +2262,7 @@ function drivePickerBox(){
     e.preventDefault();
     var f = p.files.find(function(x){ return x.id === sel.value; });
     if(!f) return;
-    if(!confirm('"' + f.name + '" yedeği yüklensin mi?\n\nŞu anki veriler bununla değiştirilecek. İşlemi geri alabilirsiniz.')) return;
+    if(!confirm('"' + bkLabel(f.name) + '" yüklensin mi?\n\nŞu anki veriler bununla değiştirilecek ve Drive\'a da yazılacak. İşlemi geri alabilirsiniz.')) return;
     driveRestoreBackup(f.id, f.name);
   } }, [
     el('span', { class:'stats', style:'flex:1 0 100%', text: p.files.length ? 'Drive › ' + DRIVE_FOLDER + ' › ' + DRIVE_BACKUPS + ' klasöründeki yedekler (en yeni üstte):' : 'Yedek bulunamadı.' }),
@@ -2104,11 +2282,11 @@ function barParts(){
   if(driveMode){
     cls = dp.cls; msg = dp.msg;
     if(drive.err) short = 'Drive hatası';
-    else if(drive.choice) short = drive.choice.type === 'conflict' ? 'Çakışma: seçim gerekli' : 'Drive: seçim bekliyor';
+    else if(drive.choice) short = 'Drive: seçim bekliyor';
     else if(drive.working || drive.connecting) short = 'Drive: işlem sürüyor…';
     else if(drive.needsLogin) short = 'Drive: giriş gerekli';
-    else if(drive.on && (drive.busy || driveDirty())) short = 'Drive\'a yazılıyor…';
-    else if(drive.on) short = 'Drive\'a kaydedildi';
+    else if(drive.on && driveDirty()) short = 'Drive ile eşitleniyor…';
+    else if(drive.on) short = 'Drive ile eşit';
     else if(driveFlag() && !driveClientId()) short = 'Drive: ayar eksik';
     else short = 'Drive bağlı değil';
     nodes = nodes.concat(dp.btns);
