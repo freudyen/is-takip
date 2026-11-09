@@ -267,6 +267,8 @@
   .aform{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
   .aform input[type=text]{flex:1 1 220px;padding:9px 11px}
   .arow-item.due .atime{color:var(--danger);font-weight:600}
+  .manual.alog{margin-top:14px}
+  .alog-row .txt{color:var(--muted)}
   .notebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:10px;font-size:14px}
   .notebar .nsub{flex:1 1 220px;color:var(--muted);font-size:13px}
   /* Bildirim / geri alma */
@@ -711,6 +713,7 @@
 
 var SCHEMA = 2;
 var TRASH_DAYS = 30;          /* çöp kutusunda saklama süresi */
+var ALOG_DAYS = 365, ALOG_MAX = 300;   /* hatırlatıcı geçmişi: saklama süresi ve en fazla kayıt */
 var DONE_LIMIT = 40;          /* "Tamamlandı" sütununda gösterilen madde sayısı */
 
 var MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -908,7 +911,7 @@ function renderNotice(){
 var migrationInfo = null;     /* { from, projects, tasks, items } */
 
 function emptyState(){
-  return { schemaVersion: SCHEMA, projects: [], weekly: {}, leave: { days:{}, notes:{}, ledger:[], adjust:0 }, alarms: [], notebook: [], trash: [] };
+  return { schemaVersion: SCHEMA, projects: [], weekly: {}, leave: { days:{}, notes:{}, ledger:[], adjust:0 }, alarms: [], alarmLog: [], notebook: [], trash: [] };
 }
 
 function normItem(raw){
@@ -1023,6 +1026,18 @@ function normLeave(raw){
   out.adjust = 0;              /* alan uyumluluk için kalır, değeri her zaman 0 */
   return out;
 }
+/* Hatırlatıcı geçmişi: onaylanan ya da maddesi tamamlandığı / silindiği için kapanan
+   hatırlatıcılar. Kimlik, hatırlatıcının kendi kimliğidir; eşitlemede "bu hatırlatıcı
+   kapatıldı" izi olarak da kullanılır. */
+function normAlarmLog(raw){
+  var cut = Date.now() - ALOG_DAYS * 86400000;
+  return normAlarms(raw).map(function(x){
+    x.endedAt = num(x.endedAt, 0) || x.at;
+    x.how = (x.how === 'done' || x.how === 'itemdel') ? x.how : 'ack';
+    return x;
+  }).filter(function(x){ return x.endedAt >= cut; })
+    .sort(function(a, b){ return b.endedAt - a.endedAt; }).slice(0, ALOG_MAX);
+}
 function normAlarms(raw){
   return (Array.isArray(raw) ? raw : []).map(function(a){
     if(!a || typeof a !== 'object') return null;
@@ -1074,6 +1089,7 @@ function normalize(raw){
   out.weekly = normWeekly(s.weekly);
   out.leave = normLeave(s.leave);
   out.alarms = normAlarms(s.alarms);
+  out.alarmLog = normAlarmLog(s.alarmLog);
   out.notebook = normNotebook(s.notebook);
   out.trash = normTrash(s.trash);
   out.schemaVersion = SCHEMA;
@@ -1156,8 +1172,12 @@ function loadSnapshot(){
 
 /* --- ortak kaydetme akışı ------------------------------------------------ */
 function stateText(){ return JSON.stringify(state, null, 2); }
+/* fileRev: her değişiklikte artar. Dosyaya yazma bittiğinde "kaydedildi" işareti yalnızca
+   yazılan sürüm hâlâ en güncel sürümse konur; yazma sürerken gelen değişiklikler için
+   yazma tekrarlanır (aynı anda tek yazma çalışır). */
+var fileRev = 0, fileBusy = false, fileAgain = false;
 function changed(){
-  dirty = true; saveError = '';
+  dirty = true; saveError = ''; fileRev++;
   updateBar();
   saveSnapshot();
   if(canWrite){
@@ -1174,11 +1194,18 @@ function flushSaves(){
 }
 function writeToJsonFile(){
   if(!jsonHandle || !canWrite) return Promise.resolve(false);
+  if(fileBusy){ fileAgain = true; return Promise.resolve(false); }
+  fileBusy = true; fileAgain = false;
+  clearTimeout(saveTimer);                         /* bu yazma en güncel hali alıyor; bekleyen zamanlayıcı gereksiz */
+  var rev = fileRev, text = stateText();
   return jsonHandle.createWritable().then(function(w){
-    return w.write(stateText()).then(function(){ return w.close(); });
+    return w.write(text).then(function(){ return w.close(); });
   }).then(function(){
+    fileBusy = false;
+    if(fileRev !== rev || fileAgain) return writeToJsonFile();      /* yazarken yeni değişiklik geldi */
     dirty = false; saveError = ''; updateBar(); saveSnapshot(); return true;
   }).catch(function(e){
+    fileBusy = false;
     saveError = 'JSON dosyasına yazılamadı: ' + errMsg(e);
     updateBar();
     setNotice({ bad:true, sticky:true, text:'Veriler dosyaya yazılamıyor. Yedeği hemen indirip güvenceye alın.',
@@ -1730,7 +1757,33 @@ function syntheticBase(local, remote, T){
     if(isPlain(v)){ var o = {}; Object.keys(v).forEach(function(k){ o[k] = build(v[k]); }); return o; }
     return v;
   }
-  return build(local);
+  var base = build(local);
+  base.alarms = alarmBase(local, remote, T);
+  base.alarmLog = [];                       /* geçmiş kayıtları iki taraftan birleşir, hiçbiri düşmez */
+  return base;
+}
+/* Hatırlatıcılarda tahmin yerine iz kullanılır: bir tarafta kapatılmış (geçmişte ya da
+   çöp kutusunda) hatırlatıcı diğer tarafta etkin olsa da kapanır. İz bırakan sürümle
+   kurulmuş ("tr") ve Drive'da izi olmayan hatırlatıcı hiç eşitlenmemiştir, korunur.
+   Yalnızca izsiz eski hatırlatıcılarda tarih tahmini kullanılır. */
+function alarmBase(local, remote, T){
+  function idx(list){ var m = {}; (list || []).forEach(function(x){ if(x && x.id) m[x.id] = x; }); return m; }
+  function ended(s){
+    var m = idx(s.alarmLog);
+    (s.trash || []).forEach(function(t){ if(t && t.kind === 'alarm' && t.data && t.data.id) m[t.data.id] = t; });
+    return m;
+  }
+  var rA = idx(remote.alarms), lA = idx(local.alarms), rEnd = ended(remote), lEnd = ended(local);
+  var keepAfter = Date.now() - ALOG_DAYS * 86400000, out = [];
+  (local.alarms || []).forEach(function(a){
+    if(rA[a.id] || rEnd[a.id]){ out.push(a); return; }       /* iki tarafta da var → Drive'daki hali; Drive'da kapatılmış → kapanır */
+    var c = num(a.createdAt, 0);
+    if(c > T) return;                                        /* Drive'ın son güncellemesinden sonra kuruldu → yeni, korunur */
+    if(a.tr && c > keepAfter) return;                        /* izi yok → Drive hiç görmedi, korunur */
+    out.push(a);                                             /* izsiz eski kayıt → başka cihazda kapatılmış sayılır */
+  });
+  (remote.alarms || []).forEach(function(a){ if(!lA[a.id] && lEnd[a.id]) out.push(a); });   /* burada kapatıldı → Drive'dan da kalkar */
+  return out;
 }
 function countIds(v, acc){
   acc = acc || [];
@@ -2153,6 +2206,13 @@ function restoreTrash(id, quiet){
   else if(e.kind === 'note') ins(noteList(), e.loc.index, e.data);
   if(!ok){ toast('Geri yüklenemedi. ' + where, { bad:true }); return; }
   state.trash.splice(i, 1);
+  /* silinirken kapatılan bağlı hatırlatıcılar da geri gelir */
+  if(e.kind === 'item' || e.kind === 'task' || e.kind === 'project'){
+    var items = e.kind === 'item' ? [e.data] : e.kind === 'task' ? (e.data.items || [])
+      : (e.data.tasks || []).reduce(function(acc, tk){ return acc.concat(tk.items || []); }, []);
+    var mine = byIds(items);
+    reviveAlarms(function(x){ return x.how === 'itemdel' && x.ref && mine({ id: x.ref.iid }); });
+  }
   commit();
   if(!quiet) toast('Geri yüklendi: ' + e.label);
 }
@@ -2185,8 +2245,9 @@ function deleteProject(pid){
   var ni = 0; p.tasks.forEach(function(t){ ni += t.items.length; });
   var e = trashPush('project', p.title, p, { index:i });
   state.projects.splice(i, 1);
+  var ended = endAlarms(function(a){ return a.ref && a.ref.pid === pid; }, 'itemdel');
   commit();
-  deletedToast(e, p.tasks.length + ' iş, ' + ni + ' madde');
+  deletedToast(e, p.tasks.length + ' iş, ' + ni + ' madde' + (ended.length ? ', ' + ended.length + ' bağlı hatırlatıcı kapatıldı' : ''));
 }
 function renameProject(pid, v){ var p = findProject(pid); if(p){ p.title = v; commit(); } }
 function moveProject(pid, delta){
@@ -2220,8 +2281,10 @@ function deleteTask(pid, tid){
   var t = p.tasks[i];
   var e = trashPush('task', t.title, t, { pid:pid, index:i });
   p.tasks.splice(i, 1);
+  var gone = byIds(t.items);
+  var ended = endAlarms(function(a){ return a.ref && gone({ id: a.ref.iid }); }, 'itemdel');
   commit();
-  deletedToast(e, t.items.length + ' madde');
+  deletedToast(e, t.items.length + ' madde' + (ended.length ? ', ' + ended.length + ' bağlı hatırlatıcı kapatıldı' : ''));
 }
 function renameTask(pid, tid, v){ var t = findTask(pid, tid); if(t){ t.title = v; commit(); } }
 function moveTask(pid, tid, delta){ var p = findProject(pid); if(p && moveInArray(p.tasks, tid, delta, sameVisibility)) commit(); }
@@ -2231,10 +2294,12 @@ function completeTask(pid, tid){
   if(!open.length) return;
   if(open.length > 1 && !confirm('"' + snip(t.title, 60) + '" işindeki ' + open.length + ' açık madde tamamlandı olarak işaretlensin mi?')) return;
   var now = Date.now(), prevStatus = open.map(function(i){ return i.status; });
-  open.forEach(function(i){ i.done = true; i.doneAt = now; delete i.status; });
+  var ended = [];
+  open.forEach(function(i){ i.done = true; i.doneAt = now; delete i.status; ended = ended.concat(syncItemAlarms(i)); });
   commit();
-  toast(open.length + ' madde tamamlandı.', { actionLabel:'↩ Geri al', action:function(){
+  toast(open.length + ' madde tamamlandı' + (ended.length ? ', bağlı ' + ended.length + ' hatırlatıcı kapatıldı.' : '.'), { actionLabel:'↩ Geri al', action:function(){
     open.forEach(function(i, k){ i.done = false; i.doneAt = null; if(prevStatus[k]) i.status = prevStatus[k]; });
+    reviveAlarms(byIds(ended));
     commit();
   } });
 }
@@ -2252,7 +2317,9 @@ function setDone(pid, tid, iid, done){
   var i = findItem(pid, tid, iid); if(!i) return;
   i.done = done; i.doneAt = done ? Date.now() : null;
   if(done) delete i.status;
+  var ended = syncItemAlarms(i);
   commit();
+  linkedAlarmToast(ended);
 }
 function setItemStatus(it, st){
   if(st === 'done'){ if(!it.done){ it.done = true; it.doneAt = Date.now(); } delete it.status; }
@@ -2260,7 +2327,9 @@ function setItemStatus(it, st){
     if(it.done){ it.done = false; it.doneAt = null; }
     if(st === 'doing' || st === 'blocked') it.status = st; else delete it.status;
   }
+  var ended = syncItemAlarms(it);
   commit();
+  linkedAlarmToast(ended);
 }
 function deleteItem(pid, tid, iid){
   var t = findTask(pid, tid); if(!t) return;
@@ -2269,8 +2338,9 @@ function deleteItem(pid, tid, iid){
   var it = t.items[i];
   var e = trashPush('item', it.text, it, { pid:pid, tid:tid, index:i });
   t.items.splice(i, 1);
+  var ended = endAlarms(function(a){ return a.ref && a.ref.iid === iid; }, 'itemdel');
   commit();
-  deletedToast(e);
+  deletedToast(e, ended.length ? ended.length + ' bağlı hatırlatıcı kapatıldı' : '');
 }
 function moveItem(pid, tid, iid, delta){ var t = findTask(pid, tid); if(t && moveInArray(t.items, iid, delta, sameItemGroup)) commit(); }
 function setField(obj, field, value){
@@ -2415,29 +2485,76 @@ function dueAlarms(){
 }
 function defaultAlarmValue(mins){ return localInputValue(Date.now() + mins * 60000); }
 function addAlarm(text, ts, ref){
-  var a = { id: uid(), text: str(text).trim(), at: ts, createdAt: Date.now() };
+  /* tr: kapanınca geçmişe iz bırakan sürümle kuruldu (eşitlemede kullanılır) */
+  var a = { id: uid(), text: str(text).trim(), at: ts, createdAt: Date.now(), tr: 1 };
   if(ref) a.ref = ref;
   alarmList().push(a);
   commit('alarm');
   return a;
 }
+/* --- hatırlatıcı geçmişi -------------------------------------------------
+   Kapanan hatırlatıcı silinmez, geçmişe taşınır (how: 'ack' onaylandı, 'done' maddesi
+   tamamlandı, 'itemdel' maddesi silindi). Kaydetmeyi çağıran yapar (commit). */
+var ALOG_HOW = { ack:'Onaylandı', done:'Madde tamamlandı', itemdel:'Madde silindi' };
+function alarmLog(){ if(!Array.isArray(state.alarmLog)) state.alarmLog = []; return state.alarmLog; }
+function endAlarms(pred, how){
+  var ended = [], ids = {}, now = Date.now();
+  state.alarms = alarmList().filter(function(a){
+    if(!pred(a)) return true;
+    ended.push(a); ids[a.id] = true; closeNotice(a.id);
+    return false;
+  });
+  if(!ended.length) return ended;
+  if(snoozeId && ids[snoozeId]) snoozeId = null;
+  state.alarmLog = ended.map(function(a){ return Object.assign({}, a, { endedAt: now, how: how }); })
+    .concat(alarmLog().filter(function(x){ return !ids[x.id]; })).slice(0, ALOG_MAX);
+  return ended;
+}
+/* geçmişteki kayıtları yeniden etkin hatırlatıcı yap */
+function reviveAlarms(pred){
+  var back = [];
+  state.alarmLog = alarmLog().filter(function(x){
+    if(!pred(x)) return true;
+    var a = Object.assign({}, x); delete a.endedAt; delete a.how;
+    if(!alarmList().some(function(y){ return y.id === a.id; })){ state.alarms.push(a); back.push(a); }
+    return false;
+  });
+  return back;
+}
+function byIds(list){ var m = {}; list.forEach(function(a){ m[a.id] = true; }); return function(x){ return !!m[x.id]; }; }
+/* Madde tamamlandıysa bağlı hatırlatıcıları kapat; yeniden açıldıysa, tamamlandığı için
+   kapanmış ve zamanı henüz gelmemiş olanları geri getir. Kapatılanları döndürür. */
+function syncItemAlarms(it){
+  if(it.done) return endAlarms(function(a){ return a.ref && a.ref.iid === it.id; }, 'done');
+  var now = Date.now();
+  reviveAlarms(function(x){ return x.how === 'done' && x.ref && x.ref.iid === it.id && x.at > now; });
+  return [];
+}
+function linkedAlarmToast(ended){
+  if(!ended.length) return;
+  toast((ended.length === 1 ? 'Bağlı hatırlatıcı' : 'Bağlı ' + ended.length + ' hatırlatıcı') + ' da kapatıldı (madde tamamlandı).', {
+    actionLabel:'↩ Hatırlatıcıyı koru', action:function(){ reviveAlarms(byIds(ended)); commit(); } });
+}
+function restoreFromLog(id){
+  var back = reviveAlarms(function(x){ return x.id === id; });
+  if(!back.length) return;
+  var a = back[0], moved = a.at <= Date.now();
+  if(moved) a.at = Date.now() + 3600000;           /* zamanı geçmişse hemen çalmasın: 1 saat sonraya */
+  commit();
+  toast('Hatırlatıcı yeniden kuruldu: ' + fmt(a.at) + (moved ? ' (1 saat sonrası)' : ''));
+}
 function ackAlarm(id){
-  closeNotice(id);
-  state.alarms = alarmList().filter(function(a){ return a.id !== id; });
-  if(snoozeId === id) snoozeId = null;
+  endAlarms(function(a){ return a.id === id; }, 'ack');
   commit();
 }
 /* zamanı gelmiş / geçmiş hatırlatıcıların hepsini tek seferde onayla (geri alınabilir) */
 function ackAllDue(){
-  var due = dueAlarms();
-  if(!due.length) return;
-  var ids = {}, removed = due.map(function(a){ ids[a.id] = true; closeNotice(a.id); return clone(a); });
-  state.alarms = alarmList().filter(function(a){ return !ids[a.id]; });
-  snoozeId = null;
+  var now = Date.now();
+  var ended = endAlarms(function(a){ return a.at <= now; }, 'ack');
+  if(!ended.length) return;
   commit();
-  toast(removed.length + ' hatırlatıcı onaylandı.', { actionLabel:'↩ Geri al', action:function(){
-    removed.forEach(function(a){ if(!alarmList().some(function(x){ return x.id === a.id; })) state.alarms.push(a); });
-    commit();
+  toast(ended.length + ' hatırlatıcı onaylandı.', { actionLabel:'↩ Geri al', action:function(){
+    reviveAlarms(byIds(ended)); commit();
   } });
 }
 function deleteAlarm(id){
@@ -3552,7 +3669,7 @@ function renderBoard(shown){
       var ids = d.cards.map(function(cd){ return cd.getAttribute('data-iid'); });
       ids.splice(d.i, 0, id);
       var it = loc.it;
-      if(it.done){ it.done = false; it.doneAt = null; }
+      if(it.done){ it.done = false; it.doneAt = null; syncItemAlarms(it); }
       if(c[0] === 'doing' || c[0] === 'blocked') it.status = c[0]; else delete it.status;
       ids.forEach(function(x, i){ var l = locateItem(x); if(l) l.it.brank = (i + 1) * 1000; });
       commit();
@@ -4478,7 +4595,29 @@ function renderAlarms(){
     panel.appendChild(ul);
   }
   root.appendChild(panel);
+
+  /* geçmiş: onaylanan ve maddesi tamamlandığı / silindiği için kapanan hatırlatıcılar */
+  var log = alarmLog();
+  if(log.length){
+    var det = el('details', { class:'manual alog' });
+    if(alogOpen) det.setAttribute('open', '');
+    det.addEventListener('toggle', function(){ alogOpen = det.open; });
+    det.appendChild(el('summary', null, [ el('span', { text:'Geçmiş' }), el('span', { class:'count', text: String(log.length) }) ]));
+    var lul = el('ul', { style:'margin-top:8px' });
+    log.slice(0, 50).forEach(function(x){
+      lul.appendChild(el('li', { class:'alog-row' }, [
+        el('span', { class:'txt rtxt', text: x.text }),
+        el('span', { class:'tag', text: ALOG_HOW[x.how] || ALOG_HOW.ack }),
+        el('span', { class:'created-tag', title:'Hatırlatma zamanı: ' + fmt(x.at), text: fmt(x.endedAt) }),
+        el('button', { type:'button', class:'small', text:'↩ Yeniden kur', title:'Zamanı geçmişse 1 saat sonrasına kurulur', onclick:function(){ restoreFromLog(x.id); } })
+      ]));
+    });
+    det.appendChild(lul);
+    det.appendChild(el('div', { class:'empty', text: (log.length > 50 ? '… ve ' + (log.length - 50) + ' kayıt daha. ' : '') + 'Kayıtlar ' + ALOG_DAYS + ' gün saklanır.' }));
+    root.appendChild(det);
+  }
 }
+var alogOpen = false;
 
 /* --- Not defteri --------------------------------------------------------- */
 /* Yeni not taslağı, araya giren yeniden çizimlerde (örn. Drive eşitlemesi) kaybolmasın */
